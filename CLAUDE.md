@@ -64,6 +64,8 @@ server/                          # Web 界面（FastAPI + SSE）
 - **表格双语处理** — 每个单元格作为独立片段翻译，翻译文本直接写入原单元格（`<br/>` 分隔英文和中文），不创建额外的表格或 HTML 元素
 - **代码块不翻译** — `<pre>`/`<code>` 标签及 CSS 类名 `class_sch`/`class_skus`/`class_scn` 标记的代码段均跳过
 - **内联格式保留** — 双语模式使用 `decode_contents()` 提取 HTML，API 返回保留 `<strong>`/`<a>`/`<em>` 等标签的翻译
+- **`lang` 属性标记** — EPUB 翻译时为每个元素添加 `lang` 属性：原文 `lang="en"`，译文 `lang="zh-CN"`（或其他目标语种），方便阅读器通过 CSS `:lang()` 伪类区分样式
+- **其他文件类型仅保留格式** — DOCX、PDF 等非 HTML 文件类型的翻译只需保留原始格式（加粗、斜体、字号等），无须添加任何额外标记（如 `lang` 属性）
 
 ## 配置说明
 
@@ -87,10 +89,21 @@ Web 界面也可通过设置弹窗修改配置（齿轮图标 → `POST /api/con
 - **表格单元格**：每个 `<td>`/`<th>` 作为独立片段，翻译文本用 `<br/>` 追加到原单元格内
 - **代码块**：跳过不翻译
 - **`data-epub-translator` 标记**：添加到已处理元素，重新解析时跳过，保证幂等性
+- **`lang` 属性**：原文元素添加 `lang="en"`，译文克隆添加 `lang="zh-CN"`（或其他目标语种）。输出示例：
+  ```html
+  <p lang="en" data-epub-translator="1">English paragraph</p>
+  <p lang="zh-CN" data-epub-translator="1">中文段落</p>
+  ```
 
 ### 中文模式（chinese_only）
 
 - 直接替换 `NavigableString` 内容为翻译文本
+
+### 非 HTML 文件类型（DOCX 等）
+
+- 仅保留原始格式（加粗、斜体、字号、颜色等），不添加 `lang` 或其他标记
+- 双语模式：在原文段落/单元格下方插入译文段落/单元格
+- 替换模式：直接替换原文内容为译文
 
 ## Web 服务器 API
 
