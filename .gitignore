@@ -29,3 +29,4 @@ Thumbs.db
 # EPUB test files
 *.epub
 !tests/fixtures/*.epub
+nonexistent*.yaml
