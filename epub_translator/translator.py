@@ -2,6 +2,8 @@ import time
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
+from openai import AuthenticationError, PermissionDeniedError, RateLimitError
+from openai import APIError, APITimeoutError, APIConnectionError
 
 from .config import Config
 
@@ -78,6 +80,61 @@ class Translator:
 
                 return translations
 
+            except AuthenticationError as e:
+                raise RuntimeError(
+                    "API Key is invalid. Please check your API Key in settings."
+                ) from e
+            except PermissionDeniedError as e:
+                raise RuntimeError(
+                    "Permission denied. Your API Key may not have access to this model."
+                ) from e
+            except RateLimitError as e:
+                if attempt < self._config.max_retries - 1:
+                    wait = 2 ** attempt * 5
+                    logger.warning("Rate limited, retrying in %ds...", wait)
+                    time.sleep(wait)
+                    continue
+                raise RuntimeError(
+                    "Rate limit exceeded. Please wait and try again later."
+                ) from e
+            except APITimeoutError as e:
+                if attempt < self._config.max_retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning("Timeout, retrying in %ds...", wait)
+                    time.sleep(wait)
+                    continue
+                raise RuntimeError(
+                    "API request timed out. Please check your network connection."
+                ) from e
+            except APIConnectionError as e:
+                if attempt < self._config.max_retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning("Connection error, retrying in %ds...", wait)
+                    time.sleep(wait)
+                    continue
+                raise RuntimeError(
+                    "Cannot connect to API. Please check your network and API Base URL."
+                ) from e
+            except APIError as e:
+                # Check for common error messages
+                msg = str(e)
+                if "insufficient" in msg.lower() or "balance" in msg.lower() or "quota" in msg.lower():
+                    raise RuntimeError(
+                        "Insufficient balance. Please recharge your API account."
+                    ) from e
+                if "model" in msg.lower() and ("not found" in msg.lower() or "not exist" in msg.lower()):
+                    raise RuntimeError(
+                        f"Model '{self._config.model}' not found. Please check the model name in settings."
+                    ) from e
+                if attempt < self._config.max_retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning(
+                        "API error (attempt %d/%d): %s. Retrying in %ds...",
+                        attempt + 1, self._config.max_retries, e, wait,
+                    )
+                    time.sleep(wait)
+                    continue
+                raise RuntimeError(f"API error: {e}") from e
             except Exception as e:
                 if attempt < self._config.max_retries - 1:
                     wait = 2 ** attempt
@@ -88,7 +145,7 @@ class Translator:
                     time.sleep(wait)
                 else:
                     raise RuntimeError(
-                        f"Translation failed after {self._config.max_retries} attempts: {e}"
+                        f"Translation failed: {e}"
                     ) from e
 
         return texts
