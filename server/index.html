@@ -19,9 +19,14 @@
     .app { max-width: 640px; margin: 0 auto; padding: 0 24px; min-height: 100vh; display: flex; flex-direction: column; }
 
     /* Header */
-    header { padding: 40px 0 32px; display: flex; align-items: center; gap: 16px; }
+    header { padding: 40px 0 32px; display: flex; align-items: center; gap: 12px; }
     .logo { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; flex: 1; }
     .logo span { color: var(--accent); }
+
+    /* Lang Toggle */
+    .lang-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; }
+    .lang-toggle button { padding: 6px 12px; border: none; background: transparent; cursor: pointer; color: var(--text2); transition: all 0.2s; font-family: var(--sans); }
+    .lang-toggle button.active { background: var(--accent); color: #fff; }
 
     /* Buttons */
     .btn { font-family: var(--sans); font-size: 14px; font-weight: 500; padding: 10px 22px; border-radius: 12px; border: none; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
@@ -92,6 +97,10 @@
     .field-hint { font-size: 12px; color: var(--text2); margin-top: 4px; }
     .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
 
+    /* Disclaimer */
+    .disclaimer { padding: 32px 0 40px; text-align: center; }
+    .disclaimer p { font-size: 12px; color: var(--text2); line-height: 1.8; max-width: 480px; margin: 0 auto; }
+
     /* Toast */
     .toast { position: fixed; top: 24px; right: 24px; z-index: 200; padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,0.12); transform: translateX(120%); transition: transform 0.3s; }
     .toast.show { transform: translateX(0); }
@@ -105,10 +114,11 @@
   <!-- Header -->
   <header>
     <div class="logo">EPUB <span>Translator</span></div>
-    <button class="btn btn-primary" onclick="openFilePicker()">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      Open a New Book
-    </button>
+    <div class="lang-toggle">
+      <button id="lang-zh" class="active" onclick="setLang('zh')">中</button>
+      <button id="lang-en" onclick="setLang('en')">EN</button>
+    </div>
+    <button class="btn btn-primary" onclick="openFilePicker()" data-i18n="openBook"></button>
     <button class="icon-btn" onclick="openSettings()" title="Settings">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
     </button>
@@ -122,11 +132,11 @@
       <div class="welcome-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
       </div>
-      <h2>Translate Your EPUB</h2>
-      <p>Drop an EPUB file here, then start translating<br>English to Chinese with one click.</p>
+      <h2 data-i18n="welcomeTitle"></h2>
+      <p data-i18n="welcomeDesc"></p>
       <div class="upload-zone" id="upload-zone">
         <input type="file" accept=".epub" onchange="handleFile(this.files[0])">
-        <p><strong>Drop your EPUB here</strong><br>or click to browse</p>
+        <p><strong data-i18n="dropHere"></strong><br><span data-i18n="orBrowse"></span></p>
       </div>
     </div>
   </div>
@@ -151,13 +161,15 @@
           </div>
         </div>
         <div class="book-actions">
-          <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Start Translation
-          </button>
+          <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()" data-i18n="startBtn"></button>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Disclaimer -->
+  <div class="disclaimer">
+    <p data-i18n="disclaimer"></p>
   </div>
 </div>
 
@@ -165,12 +177,12 @@
 <div class="progress-bar-wrap" id="progress-bar">
   <div class="progress-inner">
     <div class="progress-top">
-      <span class="progress-label" id="progress-label">Translating...</span>
+      <span class="progress-label" id="progress-label" data-i18n="translating"></span>
       <span class="progress-pct" id="progress-pct">0%</span>
     </div>
     <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
     <div class="progress-detail">
-      <span id="progress-files">0 / 0 files</span>
+      <span id="progress-files">0 / 0 <span data-i18n="files"></span></span>
       <span id="progress-time">0s</span>
     </div>
   </div>
@@ -181,36 +193,36 @@
   <div class="modal">
     <div class="modal-header">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-      <h3>API Settings</h3>
+      <h3 data-i18n="settingsTitle"></h3>
       <button class="modal-close" onclick="closeSettings()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="modal-body">
       <div class="field">
-        <label>API Key</label>
+        <label data-i18n="apiKeyLabel"></label>
         <input id="cfg-key" type="password" placeholder="sk-xxxxxxxxxxxx">
         <div class="field-hint" id="cfg-key-hint"></div>
       </div>
       <div class="field">
-        <label>API Base URL</label>
+        <label data-i18n="apiBaseLabel"></label>
         <input id="cfg-base" type="text" placeholder="https://api.deepseek.com">
       </div>
       <div class="field">
-        <label>Model</label>
+        <label data-i18n="modelLabel"></label>
         <input id="cfg-model" type="text" placeholder="deepseek-chat">
       </div>
       <div class="field">
-        <label>Translation Mode</label>
+        <label data-i18n="modeLabel"></label>
         <select id="cfg-mode">
-          <option value="bilingual">Bilingual (English + Chinese)</option>
-          <option value="chinese_only">Chinese Only</option>
+          <option value="bilingual" data-i18n="modeBilingual"></option>
+          <option value="chinese_only" data-i18n="modeChineseOnly"></option>
         </select>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
-      <button class="btn btn-primary" id="btn-save" onclick="saveSettings()">Save</button>
+      <button class="btn btn-ghost" onclick="closeSettings()" data-i18n="cancel"></button>
+      <button class="btn btn-primary" id="btn-save" onclick="saveSettings()" data-i18n="save"></button>
     </div>
   </div>
 </div>
@@ -218,11 +230,114 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ── i18n ───────────────────────────────────────────────────────────
+let lang = localStorage.getItem('epub-lang') || 'zh';
+
+const i18n = {
+  zh: {
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> 打开新书',
+    welcomeTitle: '翻译你的 EPUB',
+    welcomeDesc: '将 EPUB 文件拖放到这里，然后一键<br>将英文翻译为中文。',
+    dropHere: '将 EPUB 拖放到这里',
+    orBrowse: '或点击选择文件',
+    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始翻译',
+    stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止',
+    downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载',
+    translating: '翻译中...',
+    files: '个文件',
+    done: '翻译完成！',
+    stopped: '已停止',
+    settingsTitle: 'API 设置',
+    apiKeyLabel: 'API Key',
+    apiBaseLabel: 'API 地址',
+    modelLabel: '模型',
+    modeLabel: '翻译模式',
+    modeBilingual: '中英双语（保留原文 + 中文翻译）',
+    modeChineseOnly: '仅中文（替换原文）',
+    cancel: '取消',
+    save: '保存',
+    saving: '保存中...',
+    saved: '已保存',
+    loadBook: '加载中...',
+    bookLoaded: '书籍已加载',
+    uploadFail: '上传失败：',
+    selectEpub: '请选择 .epub 文件',
+    startFail: '启动失败：',
+    fileTooLarge: '文件过大（最大 100 MB）',
+    transComplete: '翻译完成！',
+    transStopped: '翻译已停止',
+    transFailed: '翻译失败',
+    notConfigured: '未配置',
+    currentKey: '当前：',
+    disclaimer: '本工具仅供个人学习和研究使用。翻译结果由 AI 模型生成，可能存在不准确之处，仅供参考。上传的文件将在翻译完成后自动删除，请勿上传涉及版权争议的内容。使用本工具即表示您接受以上条款。',
+  },
+  en: {
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Open a New Book',
+    welcomeTitle: 'Translate Your EPUB',
+    welcomeDesc: 'Drop an EPUB file here, then start translating<br>English to Chinese with one click.',
+    dropHere: 'Drop your EPUB here',
+    orBrowse: 'or click to browse',
+    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation',
+    stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop',
+    downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download',
+    translating: 'Translating...',
+    files: 'files',
+    done: 'Translation complete!',
+    stopped: 'Stopped',
+    settingsTitle: 'API Settings',
+    apiKeyLabel: 'API Key',
+    apiBaseLabel: 'API Base URL',
+    modelLabel: 'Model',
+    modeLabel: 'Translation Mode',
+    modeBilingual: 'Bilingual (English + Chinese)',
+    modeChineseOnly: 'Chinese Only',
+    cancel: 'Cancel',
+    save: 'Save',
+    saving: 'Saving...',
+    saved: 'Saved',
+    loadBook: 'Loading...',
+    bookLoaded: 'Book loaded',
+    uploadFail: 'Upload failed: ',
+    selectEpub: 'Please select an .epub file',
+    startFail: 'Failed to start: ',
+    fileTooLarge: 'File too large (max 100 MB)',
+    transComplete: 'Translation complete!',
+    transStopped: 'Translation stopped',
+    transFailed: 'Translation failed',
+    notConfigured: 'Not configured',
+    currentKey: 'Current: ',
+    disclaimer: 'This tool is for personal learning and research purposes only. Translation results are generated by AI models and may contain inaccuracies. Uploaded files are automatically deleted after translation. By using this tool, you agree to these terms.',
+  }
+};
+
+function t(key) { return i18n[lang][key] || key; }
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('epub-lang', l);
+  document.getElementById('lang-zh').classList.toggle('active', l === 'zh');
+  document.getElementById('lang-en').classList.toggle('active', l === 'en');
+  document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
+  applyLang();
+}
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if (val.includes('<svg') || val.includes('<')) el.innerHTML = val;
+    else el.textContent = val;
+  });
+  // Update placeholders
+  document.getElementById('cfg-key').placeholder = 'sk-xxxxxxxxxxxx';
+}
+
+// ── State ─────────────────────────────────────────────────────────
 let taskId = null, eventSource = null, timerInterval = null, startTime = 0;
 
-document.addEventListener('DOMContentLoaded', () => { checkConfig(); });
+document.addEventListener('DOMContentLoaded', () => { applyLang(); checkConfig(); });
 
-// Config
+// ── Config ────────────────────────────────────────────────────────
 function checkConfig() { fetch('/api/config').then(r=>r.json()).then(c => { if (!c.api_key_set) openSettings(); }).catch(()=>{}); }
 function openSettings() {
   fetch('/api/config').then(r=>r.json()).then(c => {
@@ -230,7 +345,7 @@ function openSettings() {
     document.getElementById('cfg-base').value = c.api_base||'';
     document.getElementById('cfg-model').value = c.model||'';
     document.getElementById('cfg-mode').value = c.translation_mode||'bilingual';
-    document.getElementById('cfg-key-hint').textContent = c.api_key_set ? 'Current: '+c.api_key_masked : 'Not configured';
+    document.getElementById('cfg-key-hint').textContent = c.api_key_set ? t('currentKey')+c.api_key_masked : t('notConfigured');
     document.getElementById('settings-modal').classList.add('active');
   });
 }
@@ -239,13 +354,13 @@ function saveSettings() {
   const b = { api_base: document.getElementById('cfg-base').value, model: document.getElementById('cfg-model').value, translation_mode: document.getElementById('cfg-mode').value };
   const k = document.getElementById('cfg-key').value.trim();
   if (k) b.api_key = k;
-  const btn = document.getElementById('btn-save'); btn.textContent='Saving...'; btn.disabled=true;
+  const btn = document.getElementById('btn-save'); btn.textContent=t('saving'); btn.disabled=true;
   fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
-    .then(r=>r.json()).then(()=>{ btn.textContent='Saved'; setTimeout(()=>{closeSettings();btn.textContent='Save';btn.disabled=false;},500); })
-    .catch(e=>{ btn.textContent='Save'; btn.disabled=false; toast('Save failed: '+e.message,'error'); });
+    .then(r=>r.json()).then(()=>{ btn.textContent=t('saved'); setTimeout(()=>{closeSettings();btn.textContent=t('save');btn.disabled=false;},500); })
+    .catch(e=>{ btn.textContent=t('save'); btn.disabled=false; toast(t('uploadFail')+e.message,'error'); });
 }
 
-// Upload
+// ── Upload ────────────────────────────────────────────────────────
 function openFilePicker() { document.getElementById('file-input').click(); }
 const uz = document.getElementById('upload-zone');
 if (uz) {
@@ -256,15 +371,16 @@ if (uz) {
 
 function handleFile(file) {
   if (!file) return;
-  if (!file.name.toLowerCase().endsWith('.epub')) { toast('Please select an .epub file','error'); return; }
+  if (!file.name.toLowerCase().endsWith('.epub')) { toast(t('selectEpub'),'error'); return; }
+  if (file.size > 100*1024*1024) { toast(t('fileTooLarge'),'error'); return; }
   const form = new FormData(); form.append('file', file);
-  toast('Loading...','');
+  toast(t('loadBook'),'');
   fetch('/api/upload',{method:'POST',body:form}).then(r=>r.json()).then(data => {
     if (data.detail) { toast(data.detail,'error'); return; }
     taskId = data.task_id;
     showBook(data, file.size);
-    toast('Book loaded','');
-  }).catch(e => toast('Upload failed: '+e.message,'error'));
+    toast(t('bookLoaded'),'');
+  }).catch(e => toast(t('uploadFail')+e.message,'error'));
 }
 
 function showBook(data, fileSize) {
@@ -283,7 +399,7 @@ function fmtSize(b) {
   return (b/1048576).toFixed(1) + ' MB';
 }
 
-// Translation
+// ── Translation ───────────────────────────────────────────────────
 function toggleTranslation() {
   const btn = document.getElementById('btn-action');
   const status = btn.dataset.status;
@@ -292,7 +408,7 @@ function toggleTranslation() {
     btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
     fetch(`/api/start/${taskId}`,{method:'POST'}).then(r=>r.json()).then(() => {
       btn.disabled = false; showStopButton(); startProgress();
-    }).catch(e => { btn.disabled = false; showStartButton(); toast('Failed: '+e.message,'error'); });
+    }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });
   } else if (status === 'translating' || status === 'loading' || status === 'queued') {
     fetch(`/api/stop/${taskId}`,{method:'POST'}).then(()=>{});
     btn.innerHTML = 'Stopping...'; btn.disabled = true;
@@ -300,22 +416,22 @@ function toggleTranslation() {
 }
 function showStopButton() {
   const btn = document.getElementById('btn-action'); btn.dataset.status = 'translating';
-  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop';
+  btn.innerHTML = t('stopBtn');
   btn.classList.remove('btn-primary','btn-download'); btn.classList.add('btn-danger');
 }
 function showStartButton() {
   const btn = document.getElementById('btn-action'); btn.dataset.status = '';
-  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation';
+  btn.innerHTML = t('startBtn');
   btn.classList.remove('btn-danger','btn-download'); btn.classList.add('btn-primary'); btn.onclick = toggleTranslation;
 }
 function showDownloadButton() {
   const btn = document.getElementById('btn-action'); btn.dataset.status = 'done';
-  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download';
+  btn.innerHTML = t('downloadBtn');
   btn.classList.remove('btn-danger','btn-primary'); btn.classList.add('btn-download');
   btn.onclick = () => { window.location = `/api/download/${taskId}`; };
 }
 
-// Progress
+// ── Progress ──────────────────────────────────────────────────────
 function startProgress() {
   startTime = Date.now();
   document.getElementById('progress-bar').classList.add('active');
@@ -329,8 +445,8 @@ function startProgress() {
       const pct = total>0 ? Math.round(done/total*100) : 0;
       document.getElementById('progress-fill').style.width = pct+'%';
       document.getElementById('progress-pct').textContent = pct+'%';
-      document.getElementById('progress-files').textContent = `${done} / ${total} files`;
-      document.getElementById('progress-label').textContent = d.file_name ? d.file_name.split('/').pop() : 'Translating...';
+      document.getElementById('progress-files').innerHTML = `${done} / ${total} ${t('files')}`;
+      document.getElementById('progress-label').textContent = d.file_name ? d.file_name.split('/').pop() : t('translating');
       showStopButton();
     } else if (d.status === 'done') { finishProgress(d); }
     else if (d.status === 'error') { errorProgress(d); }
@@ -342,14 +458,14 @@ function finishProgress(d) {
   clearInterval(timerInterval); eventSource.close();
   document.getElementById('progress-fill').style.width = '100%';
   document.getElementById('progress-pct').textContent = '100%';
-  document.getElementById('progress-label').textContent = 'Translation complete!';
-  document.getElementById('progress-files').textContent = `${d.translated||0} translated · ${d.cached||0} cached · ${fmtTime((Date.now()-startTime)/1000)}`;
-  showDownloadButton(); toast('Translation complete!','success');
+  document.getElementById('progress-label').textContent = t('done');
+  document.getElementById('progress-files').innerHTML = `${d.translated||0} translated · ${d.cached||0} cached · ${fmtTime((Date.now()-startTime)/1000)}`;
+  showDownloadButton(); toast(t('transComplete'),'success');
 }
-function errorProgress(d) { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Error: '+(d.error||'Unknown'); showStartButton(); toast(d.error||'Translation failed','error'); }
-function stoppedProgress() { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Stopped'; showStartButton(); toast('Translation stopped',''); }
+function errorProgress(d) { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Error: '+(d.error||'Unknown'); showStartButton(); toast(d.error||t('transFailed'),'error'); }
+function stoppedProgress() { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = t('stopped'); showStartButton(); toast(t('transStopped'),''); }
 
-// Helpers
+// ── Helpers ───────────────────────────────────────────────────────
 function toast(msg, type) { const el = document.getElementById('toast'); el.textContent = msg; el.className = 'toast'+(type==='success'?' toast-success':'')+(type==='error'?' toast-error':''); setTimeout(()=>el.classList.add('show'),10); setTimeout(()=>el.classList.remove('show'),3000); }
 function fmtTime(s) { if (s<60) return Math.round(s)+'s'; return Math.floor(s/60)+'m '+Math.round(s%60)+'s'; }
 </script>
