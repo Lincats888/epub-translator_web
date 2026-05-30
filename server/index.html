@@ -118,7 +118,7 @@
       <button id="lang-zh" class="active" onclick="setLang('zh')">中</button>
       <button id="lang-en" onclick="setLang('en')">EN</button>
     </div>
-    <button class="btn btn-primary" onclick="openFilePicker()" data-i18n="openBook"></button>
+    <button class="btn btn-primary" id="btn-open-book" onclick="openFilePicker()" data-i18n="openBook"></button>
     <button class="icon-btn" onclick="openSettings()" title="Settings">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
     </button>
@@ -342,11 +342,23 @@ function applyLang() {
 
 // ── State ─────────────────────────────────────────────────────────
 let taskId = null, eventSource = null, timerInterval = null, startTime = 0;
+let apiKeyReady = false;
 
 document.addEventListener('DOMContentLoaded', () => { applyLang(); checkConfig(); });
 
 // ── Config ────────────────────────────────────────────────────────
-function checkConfig() { fetch('/api/config').then(r=>r.json()).then(c => { if (!c.api_key_set) openSettings(); }).catch(()=>{}); }
+function checkConfig() {
+  fetch('/api/config').then(r=>r.json()).then(c => {
+    if (c.api_key_set) {
+      apiKeyReady = true;
+      document.getElementById('btn-open-book').disabled = false;
+    } else {
+      apiKeyReady = false;
+      document.getElementById('btn-open-book').disabled = true;
+      openSettings();
+    }
+  }).catch(()=>{});
+}
 function openSettings() {
   fetch('/api/config').then(r=>r.json()).then(c => {
     document.getElementById('cfg-key').value = '';
@@ -366,7 +378,14 @@ function saveSettings() {
   if (k) b.api_key = k;
   const btn = document.getElementById('btn-save'); btn.textContent=t('saving'); btn.disabled=true;
   fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
-    .then(r=>r.json()).then(()=>{ btn.textContent=t('saved'); setTimeout(()=>{closeSettings();btn.textContent=t('save');btn.disabled=false;},500); })
+    .then(r=>r.json()).then((resp)=>{
+      btn.textContent=t('saved');
+      apiKeyReady = true;
+      document.getElementById('btn-open-book').disabled = false;
+      const actionBtn = document.getElementById('btn-action');
+      if (actionBtn) actionBtn.disabled = false;
+      setTimeout(()=>{closeSettings();btn.textContent=t('save');btn.disabled=false;},500);
+    })
     .catch(e=>{ btn.textContent=t('save'); btn.disabled=false; toast(t('uploadFail')+e.message,'error'); });
 }
 
@@ -401,6 +420,10 @@ function showBook(data, fileSize) {
   document.getElementById('book-size').innerHTML = '<strong>' + fmtSize(fileSize) + '</strong>';
   document.getElementById('book-date').innerHTML = '<strong>' + new Date().toLocaleDateString() + '</strong>';
   showStartButton();
+  if (!apiKeyReady) {
+    document.getElementById('btn-action').disabled = true;
+    openSettings();
+  }
 }
 
 function fmtSize(b) {
@@ -411,6 +434,7 @@ function fmtSize(b) {
 
 // ── Translation ───────────────────────────────────────────────────
 function toggleTranslation() {
+  if (!apiKeyReady) { openSettings(); return; }
   const btn = document.getElementById('btn-action');
   const status = btn.dataset.status;
   if (!status || status === 'done' || status === 'error' || status === 'stopped') {
