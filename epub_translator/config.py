@@ -25,12 +25,25 @@ class Config:
         self._data = dict(DEFAULT_CONFIG)
 
     def load(self):
-        if os.path.exists(self._config_path):
-            with open(self._config_path, "r", encoding="utf-8") as f:
-                self._data = yaml.safe_load(f) or {}
+        if not os.path.exists(self._config_path):
+            self._create_config()
+        with open(self._config_path, "r", encoding="utf-8") as f:
+            self._data = yaml.safe_load(f) or {}
         for key, value in DEFAULT_CONFIG.items():
             if key not in self._data:
                 self._data[key] = value
+
+    def _create_config(self):
+        """Create config.yaml from example file or defaults."""
+        example_path = self._config_path + ".example"
+        if os.path.exists(example_path):
+            with open(example_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            with open(self._config_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        else:
+            with open(self._config_path, "w", encoding="utf-8") as f:
+                yaml.dump(DEFAULT_CONFIG, f, default_flow_style=False, allow_unicode=True)
 
     def get(self, key: str, default=None):
         return self._data.get(key, default)
