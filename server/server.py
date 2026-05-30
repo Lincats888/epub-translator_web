@@ -38,6 +38,10 @@ from epub_translator.translator import Translator
 from epub_translator.rebuilder import inject_line_height, rebuild_epub
 from epub_translator.crypto import encrypt, decrypt, is_encrypted
 
+from handlers import get_handler, get_supported_extensions, is_supported
+from handlers.docx_handler import DocxHandler
+from languages import get_all_languages, get_lang_name, detect_language, get_system_prompt
+
 # ── App & State ────────────────────────────────────────────────────────
 app = FastAPI(title="EPUB Translator")
 
@@ -222,8 +226,8 @@ def _read_epub_content(epub_path: str, opf_dir: str, href: str) -> str:
 
 # ── Translation Runner ────────────────────────────────────────────────
 
-def _run_translate(task_id: str, epub_path: str):
-    """Background translation — mirrors main.py cmd_translate logic."""
+def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN"):
+    """Background EPUB translation — mirrors main.py cmd_translate logic."""
     try:
         _update(task_id, status="loading", step="Loading configuration...")
         config = Config(CONFIG_PATH)
@@ -326,12 +330,76 @@ def _run_translate(task_id: str, epub_path: str):
         _update(task_id, status="error", error=str(e))
 
 
+def _run_translate_docx(task_id: str, file_path: str, target_lang: str = "zh-CN"):
+    """Background DOCX translation using docx_handler."""
+    try:
+        _update(task_id, status="loading", step="Loading configuration...")
+        config = Config(CONFIG_PATH)
+        config.load()
+        if not config.api_key or config.api_key in ("sk-xxxx", "sk-your-api-key-here"):
+            _update(task_id, status="error", error="API key not configured. Click settings.")
+            return
+
+        _update(task_id, step="Extracting document...")
+        handler = DocxHandler()
+        fragments = handler.extract(file_path, bilingual=(config.translation_mode == "bilingual"))
+
+        if not fragments:
+            _update(task_id, status="error", error="No translatable content found.")
+            return
+
+        # Source language detection
+        sample_text = " ".join(f.text for f in fragments[:5])
+        source_lang = detect_language(sample_text)
+        _update(task_id, source_lang=source_lang,
+                target_lang_name=get_lang_name(target_lang, "zh"))
+
+        # Check if source == target
+        from languages.detector import is_same_language
+        if is_same_language(sample_text, target_lang):
+            _update(task_id, status="error",
+                    error=f"Source language ({source_lang}) is the same as target language ({target_lang}). Nothing to translate.")
+            return
+
+        # Translate
+        total = len(fragments)
+        translator_obj = Translator(config)
+        is_bilingual = config.translation_mode == "bilingual"
+
+        _update(task_id, status="translating", step="Translating...",
+                current_file=0, total_files=1,
+                file_name=os.path.basename(file_path),
+                file_progress=0, file_total=total)
+
+        texts = [f.text for f in fragments]
+        progress_state = {"count": 0}
+
+        def on_progress(done, _total=total):
+            progress_state["count"] = min(done, _total)
+            _update(task_id, file_progress=progress_state["count"], file_total=_total)
+
+        translations = translator_obj.translate_all(texts, progress_callback=on_progress)
+
+        _update(task_id, step="Rebuilding document...")
+        output_path = handler.rebuild(
+            file_path, fragments, translations,
+            bilingual=is_bilingual, target_lang=target_lang
+        )
+
+        _update(task_id, status="done", step="Complete!",
+                output=output_path, translated=total, cached=0)
+
+    except Exception as e:
+        _update(task_id, status="error", error=str(e))
+
+
 # ── API Routes ─────────────────────────────────────────────────────────
 
 @app.post("/api/upload")
-async def upload_epub(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(".epub"):
-        raise HTTPException(400, "Only .epub files are accepted")
+async def upload_file(file: UploadFile = File(...)):
+    if not is_supported(file.filename):
+        exts = ", ".join(get_supported_extensions())
+        raise HTTPException(400, f"Unsupported format. Supported: {exts}")
 
     task_id = uuid.uuid4().hex[:12]
     upload_dir = os.path.join(TEMP_DIR, "_uploads")
@@ -342,20 +410,25 @@ async def upload_epub(file: UploadFile = File(...)):
     if len(safe_name) > max_name_len:
         base, ext = os.path.splitext(safe_name)
         safe_name = base[:max_name_len - len(ext)] + ext
-    epub_path = os.path.join(upload_dir, f"{task_id}_{safe_name}")
+    file_path = os.path.join(upload_dir, f"{task_id}_{safe_name}")
 
-    with open(epub_path, "wb") as f:
+    with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # Read metadata
-    try:
-        meta = _read_epub_meta(epub_path)
-    except Exception as e:
+    # Read metadata based on file type
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext == ".epub":
+        try:
+            meta = _read_epub_meta(file_path)
+        except Exception:
+            meta = {"title": file.filename, "author": "", "cover": None, "toc": []}
+    else:
         meta = {"title": file.filename, "author": "", "cover": None, "toc": []}
 
     _tasks[task_id] = {
         "status": "loaded", "step": "Ready", "task_id": task_id,
-        "filename": file.filename, "epub_path": epub_path,
+        "filename": file.filename, "file_path": file_path,
+        "file_type": ext,
         "opf_dir": meta.get("opf_dir", "OEBPS/"),
         "start_time": time.time(),
     }
@@ -363,11 +436,11 @@ async def upload_epub(file: UploadFile = File(...)):
     return {
         "task_id": task_id,
         "filename": file.filename,
-        "title": meta["title"],
-        "author": meta["author"],
-        "cover": meta["cover"],
-        "toc": meta["toc"],
-        "opf_dir": meta["opf_dir"],
+        "file_type": ext,
+        "title": meta.get("title", file.filename),
+        "author": meta.get("author", ""),
+        "cover": meta.get("cover"),
+        "toc": meta.get("toc", []),
     }
 
 
@@ -385,18 +458,30 @@ async def book_content(task_id: str, path: str = Query(...)):
 
 
 @app.post("/api/start/{task_id}")
-async def start_translation(task_id: str):
+async def start_translation(task_id: str, body: dict = None):
     task = _tasks.get(task_id)
     if not task:
         raise HTTPException(404, "Task not found")
     if task.get("status") == "translating":
         raise HTTPException(400, "Already translating")
-    epub_path = task.get("epub_path")
-    if not epub_path or not os.path.exists(epub_path):
-        raise HTTPException(404, "EPUB file not found")
+    file_path = task.get("file_path") or task.get("epub_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
 
-    _update(task_id, status="queued", step="Starting...", stopped=False)
-    _executor.submit(_run_translate, task_id, epub_path)
+    # Get target language from request body
+    target_lang = "zh-CN"
+    if body and "target_lang" in body:
+        target_lang = body["target_lang"]
+
+    _update(task_id, status="queued", step="Starting...", stopped=False,
+            target_lang=target_lang)
+
+    file_type = task.get("file_type", ".epub")
+    if file_type == ".epub":
+        _executor.submit(_run_translate, task_id, file_path, target_lang)
+    else:
+        _executor.submit(_run_translate_docx, task_id, file_path, target_lang)
+
     return {"ok": True}
 
 
@@ -442,6 +527,18 @@ async def download(task_id: str):
     if not output or not os.path.exists(output):
         raise HTTPException(404, "Output file not found")
     return FileResponse(output, filename=os.path.basename(output), media_type="application/epub+zip")
+
+
+# ── Language API ────────────────────────────────────────────────────
+
+@app.get("/api/languages")
+async def list_languages(ui: str = Query(default="zh")):
+    return get_all_languages(ui)
+
+
+@app.get("/api/formats")
+async def list_formats():
+    return {"extensions": get_supported_extensions()}
 
 
 # ── Config API ─────────────────────────────────────────────────────────

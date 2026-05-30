@@ -127,7 +127,7 @@
     </button>
   </header>
 
-  <input type="file" id="file-input" accept=".epub" style="display:none" onchange="handleFile(this.files[0])">
+  <input type="file" id="file-input" accept=".epub,.docx" style="display:none" onchange="handleFile(this.files[0])">
 
   <!-- Welcome -->
   <div class="welcome" id="welcome-view">
@@ -138,7 +138,7 @@
       <h2 data-i18n="welcomeTitle"></h2>
       <p data-i18n="welcomeDesc"></p>
       <div class="upload-zone" id="upload-zone">
-        <input type="file" accept=".epub" onchange="handleFile(this.files[0])">
+        <input type="file" accept=".epub,.docx" onchange="handleFile(this.files[0])">
         <p><strong data-i18n="dropHere"></strong><br><span data-i18n="orBrowse"></span></p>
       </div>
     </div>
@@ -162,6 +162,11 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <span id="book-date">—</span>
           </div>
+        </div>
+        <div style="margin-top:16px; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:13px; color:var(--text2);" data-i18n="targetLang"></span>
+          <select id="target-lang" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
+          </select>
         </div>
         <div class="book-actions">
           <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()" data-i18n="startBtn"></button>
@@ -255,6 +260,7 @@ const i18n = {
     dropHere: '将 EPUB 拖放到这里',
     orBrowse: '或点击选择文件',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始翻译',
+    targetLang: '目标语言：',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止',
     downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载',
     translating: '翻译中...',
@@ -295,6 +301,7 @@ const i18n = {
     dropHere: 'Drop your EPUB here',
     orBrowse: 'or click to browse',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation',
+    targetLang: 'Target: ',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop',
     downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download',
     translating: 'Translating...',
@@ -339,6 +346,7 @@ function setLang(l) {
   document.getElementById('lang-en').classList.toggle('active', l === 'en');
   document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
   applyLang();
+  loadLanguages();
 }
 
 function applyLang() {
@@ -356,7 +364,22 @@ function applyLang() {
 let taskId = null, eventSource = null, timerInterval = null, startTime = 0;
 let apiKeyReady = false;
 
-document.addEventListener('DOMContentLoaded', () => { applyLang(); checkConfig(); });
+document.addEventListener('DOMContentLoaded', () => { applyLang(); checkConfig(); loadLanguages(); });
+
+// ── Languages ──────────────────────────────────────────────────────
+function loadLanguages() {
+  fetch('/api/languages?ui=' + lang).then(r=>r.json()).then(list => {
+    const sel = document.getElementById('target-lang');
+    sel.innerHTML = '';
+    list.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l.code;
+      opt.textContent = l.name;
+      if (l.code === 'zh-CN') opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
+}
 
 // ── Config ────────────────────────────────────────────────────────
 function checkConfig() {
@@ -461,7 +484,12 @@ function toggleTranslation() {
   if (!status || status === 'done' || status === 'error' || status === 'stopped') {
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Starting...';
     btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
-    fetch(`/api/start/${taskId}`,{method:'POST'}).then(r=>r.json()).then(() => {
+    const targetLang = document.getElementById('target-lang').value;
+    fetch(`/api/start/${taskId}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({target_lang: targetLang})
+    }).then(r=>r.json()).then(() => {
       btn.disabled = false; showStopButton(); startProgress();
     }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });
   } else if (status === 'translating' || status === 'loading' || status === 'queued') {
