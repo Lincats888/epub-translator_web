@@ -1,6 +1,8 @@
 import os
 import yaml
 
+from epub_translator.crypto import decrypt, is_encrypted
+
 DEFAULT_CONFIG = {
     "api_key": "",
     "api_base": "https://api.deepseek.com",
@@ -35,7 +37,10 @@ class Config:
 
     @property
     def api_key(self) -> str:
-        return self._data.get("api_key", "")
+        raw = self._data.get("api_key", "")
+        if is_encrypted(raw):
+            return decrypt(raw)
+        return raw
 
     @property
     def api_base(self) -> str:

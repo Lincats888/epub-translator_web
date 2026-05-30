@@ -36,6 +36,7 @@ from epub_translator.cache import TranslationCache
 from epub_translator.parser import parse_file
 from epub_translator.translator import Translator
 from epub_translator.rebuilder import inject_line_height, rebuild_epub
+from epub_translator.crypto import encrypt, decrypt, is_encrypted
 
 # ── App & State ────────────────────────────────────────────────────────
 app = FastAPI(title="EPUB Translator")
@@ -446,6 +447,9 @@ async def download(task_id: str):
 # ── Config API ─────────────────────────────────────────────────────────
 
 def _mask_key(key: str) -> str:
+    """Mask API key for display. Handles both plain and encrypted keys."""
+    if is_encrypted(key):
+        key = decrypt(key)
     if not key or len(key) < 8:
         return ""
     return key[:6] + "****" + key[-4:]
@@ -458,9 +462,15 @@ async def get_config():
             cfg = yaml.safe_load(f) or {}
     except FileNotFoundError:
         cfg = {}
+
+    raw_key = cfg.get("api_key", "")
+    encrypted = is_encrypted(raw_key)
+    has_key = bool(raw_key and raw_key != "sk-xxxx")
+
     return {
-        "api_key_masked": _mask_key(cfg.get("api_key", "")),
-        "api_key_set": bool(cfg.get("api_key") and cfg.get("api_key") != "sk-xxxx"),
+        "api_key_masked": _mask_key(raw_key) if has_key else "",
+        "api_key_set": has_key,
+        "api_key_encrypted": encrypted,
         "api_base": cfg.get("api_base", ""),
         "model": cfg.get("model", ""),
         "translation_mode": cfg.get("translation_mode", "bilingual"),
@@ -476,7 +486,9 @@ async def update_config(body: dict):
         cfg = {}
 
     if "api_key" in body:
-        cfg["api_key"] = body["api_key"].strip()
+        raw_key = body["api_key"].strip()
+        # Encrypt the key before storing
+        cfg["api_key"] = encrypt(raw_key) if raw_key else ""
     if "api_base" in body:
         cfg["api_base"] = body["api_base"].strip()
     if "model" in body:

@@ -11,6 +11,7 @@ output/
 
 # Config (contains API key)
 config.yaml
+.secret
 
 # Test artifacts
 .pytest_cache/
