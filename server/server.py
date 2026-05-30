@@ -228,7 +228,7 @@ def _run_translate(task_id: str, epub_path: str):
         _update(task_id, status="loading", step="Loading configuration...")
         config = Config(CONFIG_PATH)
         config.load()
-        if not config.api_key or config.api_key == "sk-xxxx":
+        if not config.api_key or config.api_key in ("sk-xxxx", "sk-your-api-key-here"):
             _update(task_id, status="error", error="API key not configured. Click settings.")
             return
 
@@ -465,7 +465,9 @@ async def get_config():
 
     raw_key = cfg.get("api_key", "")
     encrypted = is_encrypted(raw_key)
-    has_key = bool(raw_key and raw_key != "sk-xxxx")
+    # Decrypt if needed, then check if it's a real key (not placeholder)
+    plain_key = decrypt(raw_key) if encrypted else raw_key
+    has_key = bool(plain_key and plain_key not in ("sk-xxxx", "sk-your-api-key-here"))
 
     return {
         "api_key_masked": _mask_key(raw_key) if has_key else "",
