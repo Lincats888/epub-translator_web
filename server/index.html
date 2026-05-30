@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EPUB Translator</title>
+  <link rel="preconnect" href="https://fonts.loli.net">
+  <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #FCF9F5; --card: #FFFFFF; --text: #2D2D2D; --text2: #8A8A8A;
+      --accent: #C8956C; --accent-hover: #B8845B; --accent-light: #F5EDE6;
+      --border: #EDE8E2; --shadow: 0 2px 16px rgba(0,0,0,0.06);
+      --radius: 16px; --serif: 'Noto Serif SC', 'Georgia', serif;
+      --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    .app { max-width: 640px; margin: 0 auto; padding: 0 24px; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Header */
+    header { padding: 40px 0 32px; display: flex; align-items: center; gap: 16px; }
+    .logo { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; flex: 1; }
+    .logo span { color: var(--accent); }
+
+    /* Buttons */
+    .btn { font-family: var(--sans); font-size: 14px; font-weight: 500; padding: 10px 22px; border-radius: 12px; border: none; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(200,149,108,0.3); }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--card); color: var(--text); }
+    .btn-danger { background: #E85D5D; color: #fff; }
+    .btn-danger:hover { background: #D44D4D; }
+    .btn-download { background: #5DAA7E; color: #fff; box-shadow: 0 2px 8px rgba(93,170,126,0.3); }
+    .btn-download:hover { background: #4D9A6E; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text2); transition: all 0.2s; }
+    .icon-btn:hover { background: var(--card); color: var(--text); }
+
+    /* Welcome */
+    .welcome { flex: 1; display: flex; align-items: center; justify-content: center; }
+    .welcome-inner { text-align: center; width: 100%; }
+    .welcome-icon { width: 72px; height: 72px; margin: 0 auto 20px; border-radius: 20px; background: var(--accent-light); display: flex; align-items: center; justify-content: center; }
+    .welcome-icon svg { width: 32px; height: 32px; color: var(--accent); }
+    .welcome h2 { font-family: var(--serif); font-size: 26px; font-weight: 600; margin-bottom: 8px; }
+    .welcome p { color: var(--text2); font-size: 14px; margin-bottom: 28px; line-height: 1.7; }
+    .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px; cursor: pointer; transition: all 0.3s; position: relative; }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: var(--accent-light); }
+    .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-zone p { font-size: 14px; color: var(--text2); }
+    .upload-zone p strong { color: var(--text); font-weight: 500; }
+
+    /* Book Card */
+    .book-view { flex: 1; display: none; flex-direction: column; padding-bottom: 100px; }
+    .book-view.active { display: flex; }
+    .book-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 32px; display: flex; gap: 24px; align-items: flex-start; }
+    .book-icon { width: 64px; height: 80px; border-radius: 10px; background: linear-gradient(135deg, var(--accent-light), #E8E2DB); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .book-icon svg { width: 28px; height: 28px; color: var(--accent); }
+    .book-info { flex: 1; min-width: 0; }
+    .book-title { font-family: var(--serif); font-size: 20px; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+    .book-author { font-size: 14px; color: var(--text2); margin-bottom: 16px; }
+    .book-meta { display: flex; gap: 20px; flex-wrap: wrap; }
+    .meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); }
+    .meta-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .meta-item strong { color: var(--text); font-weight: 500; }
+    .book-actions { margin-top: 24px; display: flex; gap: 10px; }
+
+    /* Progress */
+    .progress-bar-wrap { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: var(--card); border-top: 1px solid var(--border); padding: 16px 24px; transform: translateY(100%); transition: transform 0.3s; }
+    .progress-bar-wrap.active { transform: translateY(0); }
+    .progress-inner { max-width: 640px; margin: 0 auto; }
+    .progress-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .progress-label { font-size: 13px; color: var(--text2); }
+    .progress-pct { font-size: 13px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .progress-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; width: 0%; background: linear-gradient(90deg, var(--accent), #D4A882); transition: width 0.4s; }
+    .progress-detail { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text2); }
+
+    /* Settings Modal */
+    .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: var(--card); border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0,0,0,0.15); width: 100%; max-width: 420px; margin: 16px; overflow: hidden; }
+    .modal-header { padding: 24px 24px 16px; display: flex; align-items: center; gap: 12px; }
+    .modal-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 600; flex: 1; }
+    .modal-close { width: 32px; height: 32px; border: none; background: none; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text2); }
+    .modal-close:hover { background: var(--accent-light); }
+    .modal-body { padding: 0 24px 24px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .field input, .field select { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; font-family: var(--sans); font-size: 14px; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.2s; }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+    .field-hint { font-size: 12px; color: var(--text2); margin-top: 4px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+    /* Toast */
+    .toast { position: fixed; top: 24px; right: 24px; z-index: 200; padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,0.12); transform: translateX(120%); transition: transform 0.3s; }
+    .toast.show { transform: translateX(0); }
+    .toast-success { background: #E8F5EE; color: #2D7A4F; }
+    .toast-error { background: #FDECEC; color: #B83232; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <header>
+    <div class="logo">EPUB <span>Translator</span></div>
+    <button class="btn btn-primary" onclick="openFilePicker()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      Open a New Book
+    </button>
+    <button class="icon-btn" onclick="openSettings()" title="Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </header>
+
+  <input type="file" id="file-input" accept=".epub" style="display:none" onchange="handleFile(this.files[0])">
+
+  <!-- Welcome -->
+  <div class="welcome" id="welcome-view">
+    <div class="welcome-inner">
+      <div class="welcome-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      </div>
+      <h2>Translate Your EPUB</h2>
+      <p>Drop an EPUB file here, then start translating<br>English to Chinese with one click.</p>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" accept=".epub" onchange="handleFile(this.files[0])">
+        <p><strong>Drop your EPUB here</strong><br>or click to browse</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Book View -->
+  <div class="book-view" id="book-view">
+    <div class="book-card">
+      <div class="book-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      </div>
+      <div class="book-info">
+        <div class="book-title" id="book-title">—</div>
+        <div class="book-author" id="book-author">—</div>
+        <div class="book-meta">
+          <div class="meta-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            <span id="book-size">—</span>
+          </div>
+          <div class="meta-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span id="book-date">—</span>
+          </div>
+        </div>
+        <div class="book-actions">
+          <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Start Translation
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Progress Bar -->
+<div class="progress-bar-wrap" id="progress-bar">
+  <div class="progress-inner">
+    <div class="progress-top">
+      <span class="progress-label" id="progress-label">Translating...</span>
+      <span class="progress-pct" id="progress-pct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-detail">
+      <span id="progress-files">0 / 0 files</span>
+      <span id="progress-time">0s</span>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      <h3>API Settings</h3>
+      <button class="modal-close" onclick="closeSettings()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>API Key</label>
+        <input id="cfg-key" type="password" placeholder="sk-xxxxxxxxxxxx">
+        <div class="field-hint" id="cfg-key-hint"></div>
+      </div>
+      <div class="field">
+        <label>API Base URL</label>
+        <input id="cfg-base" type="text" placeholder="https://api.deepseek.com">
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <input id="cfg-model" type="text" placeholder="deepseek-chat">
+      </div>
+      <div class="field">
+        <label>Translation Mode</label>
+        <select id="cfg-mode">
+          <option value="bilingual">Bilingual (English + Chinese)</option>
+          <option value="chinese_only">Chinese Only</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" id="btn-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let taskId = null, eventSource = null, timerInterval = null, startTime = 0;
+
+document.addEventListener('DOMContentLoaded', () => { checkConfig(); });
+
+// Config
+function checkConfig() { fetch('/api/config').then(r=>r.json()).then(c => { if (!c.api_key_set) openSettings(); }).catch(()=>{}); }
+function openSettings() {
+  fetch('/api/config').then(r=>r.json()).then(c => {
+    document.getElementById('cfg-key').value = '';
+    document.getElementById('cfg-base').value = c.api_base||'';
+    document.getElementById('cfg-model').value = c.model||'';
+    document.getElementById('cfg-mode').value = c.translation_mode||'bilingual';
+    document.getElementById('cfg-key-hint').textContent = c.api_key_set ? 'Current: '+c.api_key_masked : 'Not configured';
+    document.getElementById('settings-modal').classList.add('active');
+  });
+}
+function closeSettings() { document.getElementById('settings-modal').classList.remove('active'); }
+function saveSettings() {
+  const b = { api_base: document.getElementById('cfg-base').value, model: document.getElementById('cfg-model').value, translation_mode: document.getElementById('cfg-mode').value };
+  const k = document.getElementById('cfg-key').value.trim();
+  if (k) b.api_key = k;
+  const btn = document.getElementById('btn-save'); btn.textContent='Saving...'; btn.disabled=true;
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
+    .then(r=>r.json()).then(()=>{ btn.textContent='Saved'; setTimeout(()=>{closeSettings();btn.textContent='Save';btn.disabled=false;},500); })
+    .catch(e=>{ btn.textContent='Save'; btn.disabled=false; toast('Save failed: '+e.message,'error'); });
+}
+
+// Upload
+function openFilePicker() { document.getElementById('file-input').click(); }
+const uz = document.getElementById('upload-zone');
+if (uz) {
+  ['dragenter','dragover'].forEach(e => uz.addEventListener(e,ev=>{ev.preventDefault();uz.classList.add('dragover');}));
+  ['dragleave','drop'].forEach(e => uz.addEventListener(e,ev=>{ev.preventDefault();uz.classList.remove('dragover');}));
+  uz.addEventListener('drop', ev => { const f=ev.dataTransfer.files[0]; if(f) handleFile(f); });
+}
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.epub')) { toast('Please select an .epub file','error'); return; }
+  const form = new FormData(); form.append('file', file);
+  toast('Loading...','');
+  fetch('/api/upload',{method:'POST',body:form}).then(r=>r.json()).then(data => {
+    if (data.detail) { toast(data.detail,'error'); return; }
+    taskId = data.task_id;
+    showBook(data, file.size);
+    toast('Book loaded','');
+  }).catch(e => toast('Upload failed: '+e.message,'error'));
+}
+
+function showBook(data, fileSize) {
+  document.getElementById('welcome-view').style.display = 'none';
+  document.getElementById('book-view').classList.add('active');
+  document.getElementById('book-title').textContent = data.title || data.filename;
+  document.getElementById('book-author').textContent = data.author || '';
+  document.getElementById('book-size').innerHTML = '<strong>' + fmtSize(fileSize) + '</strong>';
+  document.getElementById('book-date').innerHTML = '<strong>' + new Date().toLocaleDateString() + '</strong>';
+  showStartButton();
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+// Translation
+function toggleTranslation() {
+  const btn = document.getElementById('btn-action');
+  const status = btn.dataset.status;
+  if (!status || status === 'done' || status === 'error' || status === 'stopped') {
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Starting...';
+    btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
+    fetch(`/api/start/${taskId}`,{method:'POST'}).then(r=>r.json()).then(() => {
+      btn.disabled = false; showStopButton(); startProgress();
+    }).catch(e => { btn.disabled = false; showStartButton(); toast('Failed: '+e.message,'error'); });
+  } else if (status === 'translating' || status === 'loading' || status === 'queued') {
+    fetch(`/api/stop/${taskId}`,{method:'POST'}).then(()=>{});
+    btn.innerHTML = 'Stopping...'; btn.disabled = true;
+  }
+}
+function showStopButton() {
+  const btn = document.getElementById('btn-action'); btn.dataset.status = 'translating';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop';
+  btn.classList.remove('btn-primary','btn-download'); btn.classList.add('btn-danger');
+}
+function showStartButton() {
+  const btn = document.getElementById('btn-action'); btn.dataset.status = '';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation';
+  btn.classList.remove('btn-danger','btn-download'); btn.classList.add('btn-primary'); btn.onclick = toggleTranslation;
+}
+function showDownloadButton() {
+  const btn = document.getElementById('btn-action'); btn.dataset.status = 'done';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download';
+  btn.classList.remove('btn-danger','btn-primary'); btn.classList.add('btn-download');
+  btn.onclick = () => { window.location = `/api/download/${taskId}`; };
+}
+
+// Progress
+function startProgress() {
+  startTime = Date.now();
+  document.getElementById('progress-bar').classList.add('active');
+  timerInterval = setInterval(() => { document.getElementById('progress-time').textContent = fmtTime((Date.now()-startTime)/1000); }, 1000);
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`/api/progress/${taskId}`);
+  eventSource.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.status === 'translating') {
+      const done = d.current_file||0, total = d.total_files||0;
+      const pct = total>0 ? Math.round(done/total*100) : 0;
+      document.getElementById('progress-fill').style.width = pct+'%';
+      document.getElementById('progress-pct').textContent = pct+'%';
+      document.getElementById('progress-files').textContent = `${done} / ${total} files`;
+      document.getElementById('progress-label').textContent = d.file_name ? d.file_name.split('/').pop() : 'Translating...';
+      showStopButton();
+    } else if (d.status === 'done') { finishProgress(d); }
+    else if (d.status === 'error') { errorProgress(d); }
+    else if (d.status === 'stopped') { stoppedProgress(); }
+  };
+  eventSource.onerror = () => { eventSource.close(); };
+}
+function finishProgress(d) {
+  clearInterval(timerInterval); eventSource.close();
+  document.getElementById('progress-fill').style.width = '100%';
+  document.getElementById('progress-pct').textContent = '100%';
+  document.getElementById('progress-label').textContent = 'Translation complete!';
+  document.getElementById('progress-files').textContent = `${d.translated||0} translated · ${d.cached||0} cached · ${fmtTime((Date.now()-startTime)/1000)}`;
+  showDownloadButton(); toast('Translation complete!','success');
+}
+function errorProgress(d) { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Error: '+(d.error||'Unknown'); showStartButton(); toast(d.error||'Translation failed','error'); }
+function stoppedProgress() { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Stopped'; showStartButton(); toast('Translation stopped',''); }
+
+// Helpers
+function toast(msg, type) { const el = document.getElementById('toast'); el.textContent = msg; el.className = 'toast'+(type==='success'?' toast-success':'')+(type==='error'?' toast-error':''); setTimeout(()=>el.classList.add('show'),10); setTimeout(()=>el.classList.remove('show'),3000); }
+function fmtTime(s) { if (s<60) return Math.round(s)+'s'; return Math.floor(s/60)+'m '+Math.round(s%60)+'s'; }
+</script>
+</body>
+</html>

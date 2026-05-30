@@ -1,0 +1,25 @@
+# DeepSeek API Configuration
+api_key: "sk-your-api-key-here"
+api_base: "https://api.deepseek.com"
+model: "deepseek-chat"
+
+# Translation mode: "bilingual" or "chinese_only"
+translation_mode: "bilingual"
+
+# Language settings
+source_language: "English"
+target_language: "Simplified Chinese"
+
+# Translation parameters
+batch_size: 20
+max_concurrency: 5
+max_retries: 3
+api_timeout: 120
+temperature: 0.3
+
+# Tags to skip (content inside these tags will not be translated)
+skip_tags:
+  - script
+  - style
+  - code
+  - pre

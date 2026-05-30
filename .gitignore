@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Temp & output
+temp/
+output/
+
+# Config (contains API key)
+config.yaml
+
+# Test artifacts
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# EPUB test files
+*.epub
+!tests/fixtures/*.epub
