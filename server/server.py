@@ -506,6 +506,13 @@ async def update_config(body: dict):
 
 # ── Frontend ───────────────────────────────────────────────────────────
 
+from fastapi.staticfiles import StaticFiles
+
+_images_dir = os.path.join(os.path.dirname(__file__), "images")
+if os.path.isdir(_images_dir):
+    app.mount("/images", StaticFiles(directory=_images_dir), name="images")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     html_path = os.path.join(os.path.dirname(__file__), "index.html")

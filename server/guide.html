@@ -18,18 +18,18 @@
     body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.8; -webkit-font-smoothing: antialiased; }
     .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
 
-    /* Header */
-    header { padding: 32px 0 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
+    header { padding: 32px 0 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
     .logo { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; flex: 1; }
     .logo span { color: var(--accent); }
+    .lang-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; }
+    .lang-toggle button { padding: 6px 12px; border: none; background: transparent; cursor: pointer; color: var(--text2); transition: all 0.2s; font-family: var(--sans); }
+    .lang-toggle button.active { background: var(--accent); color: #fff; }
     .back-btn { font-size: 14px; color: var(--text2); text-decoration: none; display: flex; align-items: center; gap: 6px; }
     .back-btn:hover { color: var(--text); }
 
-    /* Title */
     .page-title { font-family: var(--serif); font-size: 32px; font-weight: 700; margin-bottom: 8px; }
     .page-subtitle { font-size: 15px; color: var(--text2); margin-bottom: 48px; }
 
-    /* Steps */
     .step { display: flex; gap: 20px; margin-bottom: 40px; }
     .step-icon { width: 48px; height: 48px; border-radius: 14px; background: var(--accent-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .step-icon svg { width: 22px; height: 22px; color: var(--accent); }
@@ -41,25 +41,18 @@
     .step-note { font-size: 13px; color: var(--accent); background: var(--accent-light); padding: 10px 14px; border-radius: 10px; display: flex; align-items: flex-start; gap: 8px; }
     .step-note svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; }
 
-    /* Screenshot placeholder */
-    .screenshot { border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px; text-align: center; margin-bottom: 12px; background: var(--card); }
-    .screenshot svg { width: 32px; height: 32px; color: var(--border); margin-bottom: 8px; }
-    .screenshot p { font-size: 12px; color: var(--text2); }
+    .screenshot { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 12px; background: var(--card); box-shadow: var(--shadow); }
+    .screenshot img { width: 100%; display: block; }
 
-    /* Divider */
     .divider { height: 1px; background: var(--border); margin: 40px 0; }
 
-    /* FAQ */
     .faq-title { font-family: var(--serif); font-size: 24px; font-weight: 600; margin-bottom: 24px; }
     .faq-item { margin-bottom: 24px; }
     .faq-q { font-size: 15px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
     .faq-q svg { width: 16px; height: 16px; color: var(--accent); flex-shrink: 0; }
     .faq-a { font-size: 14px; color: var(--text2); padding-left: 24px; }
 
-    /* Footer */
     footer { padding: 32px 0 40px; text-align: center; font-size: 12px; color: var(--text2); border-top: 1px solid var(--border); margin-top: 48px; }
-
-    /* Code highlight */
     code { background: var(--accent-light); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
   </style>
 </head>
@@ -68,129 +61,92 @@
 
   <header>
     <div class="logo">EPUB <span>Translator</span></div>
-    <a href="/" class="back-btn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      Back
-    </a>
+    <div class="lang-toggle">
+      <button id="lang-zh" onclick="setLang('zh')">中</button>
+      <button id="lang-en" onclick="setLang('en')">EN</button>
+    </div>
+    <a href="/" class="back-btn" data-i18n="back"></a>
   </header>
 
-  <h1 class="page-title">User Guide</h1>
-  <p class="page-subtitle">Learn how to translate your EPUB books from English to Chinese</p>
+  <h1 class="page-title" data-i18n="pageTitle"></h1>
+  <p class="page-subtitle" data-i18n="pageSubtitle"></p>
 
   <!-- Step 1 -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
     <div class="step-content">
-      <div class="step-num">Step 1</div>
-      <div class="step-title">Install Python</div>
-      <div class="step-desc">Download and install Python 3.10 or later from the official website. Make sure to check <code>Add to PATH</code> during installation.</div>
-      <div class="step-note">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <span>Download: <a href="https://www.python.org/downloads/" target="_blank" style="color:var(--accent)">python.org/downloads</a></span>
-      </div>
+      <div class="step-num" data-i18n="step1Num"></div>
+      <div class="step-title" data-i18n="step1Title"></div>
+      <div class="step-desc" data-i18n="step1Desc"></div>
+      <div class="step-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span data-i18n="step1Note"></span></div>
     </div>
   </div>
 
   <!-- Step 2 -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
     <div class="step-content">
-      <div class="step-num">Step 2</div>
-      <div class="step-title">Get Your API Key</div>
-      <div class="step-desc">Visit DeepSeek Platform to create an API Key. This key is used to call the translation service.</div>
-      <div class="step-note">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <span>Apply: <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent)">platform.deepseek.com/api_keys</a></span>
-      </div>
-      <div class="screenshot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>Screenshot: DeepSeek API Key page</p>
-      </div>
+      <div class="step-num" data-i18n="step2Num"></div>
+      <div class="step-title" data-i18n="step2Title"></div>
+      <div class="step-desc" data-i18n="step2Desc"></div>
+      <div class="step-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span data-i18n="step2Note"></span></div>
+      <div class="screenshot"><img src="/images/1_DeepSeek_API_Key_page.png" alt="DeepSeek API Key"></div>
     </div>
   </div>
 
   <!-- Step 3 -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
     <div class="step-content">
-      <div class="step-num">Step 3</div>
-      <div class="step-title">Start the Application</div>
-      <div class="step-desc">Double-click <code>启动.bat</code> (Windows) or run the command below. The browser will open automatically.</div>
+      <div class="step-num" data-i18n="step3Num"></div>
+      <div class="step-title" data-i18n="step3Title"></div>
+      <div class="step-desc" data-i18n="step3Desc"></div>
       <div class="step-code">python -m uvicorn server.server:app --host 127.0.0.1 --port 8080</div>
-      <div class="step-note">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <span>The startup script auto-installs dependencies on first run</span>
-      </div>
+      <div class="step-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span data-i18n="step3Note"></span></div>
     </div>
   </div>
 
   <!-- Step 4 -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-4.44a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7.56-7z"/><polyline points="14 2 14 8 20 8"/></svg></div>
     <div class="step-content">
-      <div class="step-num">Step 4</div>
-      <div class="step-title">Configure API Key</div>
-      <div class="step-desc">On first launch, a settings popup will appear automatically. Enter your API Key and click <code>Save</code>. The key is stored encrypted.</div>
-      <div class="screenshot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>Screenshot: Settings popup with API Key input</p>
-      </div>
+      <div class="step-num" data-i18n="step4Num"></div>
+      <div class="step-title" data-i18n="step4Title"></div>
+      <div class="step-desc" data-i18n="step4Desc"></div>
+      <div class="screenshot"><img src="/images/2_Settings_popup_with_API_Key_input.png" alt="Settings"></div>
     </div>
   </div>
 
   <!-- Step 5 -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></div>
     <div class="step-content">
-      <div class="step-num">Step 5</div>
-      <div class="step-title">Open an EPUB File</div>
-      <div class="step-desc">Click <code>Open a New Book</code> or drag and drop an <code>.epub</code> file onto the page. The book info (title, author, size) will be displayed.</div>
-      <div class="screenshot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>Screenshot: Book info card after upload</p>
-      </div>
+      <div class="step-num" data-i18n="step5Num"></div>
+      <div class="step-title" data-i18n="step5Title"></div>
+      <div class="step-desc" data-i18n="step5Desc"></div>
+      <div class="screenshot"><img src="/images/3_Book_info_card_after_upload.png" alt="Book Info"></div>
     </div>
   </div>
 
   <!-- Step 6 -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
     <div class="step-content">
-      <div class="step-num">Step 6</div>
-      <div class="step-title">Start Translation</div>
-      <div class="step-desc">Click the <code>Start Translation</code> button. The progress bar at the bottom shows real-time translation status.</div>
-      <div class="screenshot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>Screenshot: Progress bar during translation</p>
-      </div>
+      <div class="step-num" data-i18n="step6Num"></div>
+      <div class="step-title" data-i18n="step6Title"></div>
+      <div class="step-desc" data-i18n="step6Desc"></div>
+      <div class="screenshot"><img src="/images/4_Progress_bar_during_translation.png" alt="Progress"></div>
     </div>
   </div>
 
   <!-- Step 7 -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
     <div class="step-content">
-      <div class="step-num">Step 7</div>
-      <div class="step-title">Download the Result</div>
-      <div class="step-desc">When translation completes, click the <code>Download</code> button to save the translated EPUB file.</div>
-      <div class="screenshot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>Screenshot: Download button after completion</p>
-      </div>
+      <div class="step-num" data-i18n="step7Num"></div>
+      <div class="step-title" data-i18n="step7Title"></div>
+      <div class="step-desc" data-i18n="step7Desc"></div>
+      <div class="screenshot"><img src="/images/5_Download_button_after_completion.png" alt="Download"></div>
     </div>
   </div>
 
@@ -198,81 +154,120 @@
 
   <!-- Features -->
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></div>
     <div class="step-content">
-      <div class="step-title">Translation Modes</div>
-      <div class="step-desc">
-        <strong>🌐 Bilingual (default):</strong> Keeps original English text and adds Chinese translation below each paragraph. Great for language learning.<br><br>
-        <strong>🇨🇳 Chinese Only:</strong> Replaces English text with Chinese translation. Produces a pure Chinese EPUB.
-      </div>
+      <div class="step-title" data-i18n="modesTitle"></div>
+      <div class="step-desc" data-i18n="modesDesc"></div>
     </div>
   </div>
 
   <div class="step">
-    <div class="step-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-    </div>
+    <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
     <div class="step-content">
-      <div class="step-title">Security</div>
-      <div class="step-desc">
-        <strong>🔒 Encrypted API Key:</strong> Your API key is encrypted with AES-128 before storage.<br>
-        <strong>🗑️ Auto Cleanup:</strong> Uploaded files are automatically deleted after translation.<br>
-        <strong>🏠 Local Processing:</strong> Everything runs on your machine. No data sent to third parties.
-      </div>
+      <div class="step-title" data-i18n="securityTitle"></div>
+      <div class="step-desc" data-i18n="securityDesc"></div>
     </div>
   </div>
 
   <div class="divider"></div>
 
   <!-- FAQ -->
-  <h2 class="faq-title">FAQ</h2>
+  <h2 class="faq-title" data-i18n="faqTitle"></h2>
 
   <div class="faq-item">
-    <div class="faq-q">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      What API does this tool use?
-    </div>
-    <div class="faq-a">By default it uses DeepSeek API. You can switch to any OpenAI-compatible API by changing the API Base URL and Model in settings.</div>
+    <div class="faq-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span data-i18n="faq1Q"></span></div>
+    <div class="faq-a" data-i18n="faq1A"></div>
   </div>
-
   <div class="faq-item">
-    <div class="faq-q">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      What file formats are supported?
-    </div>
-    <div class="faq-a">Only <code>.epub</code> files are supported. The tool preserves all formatting, images, links, and table of contents.</div>
+    <div class="faq-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span data-i18n="faq2Q"></span></div>
+    <div class="faq-a" data-i18n="faq2A"></div>
   </div>
-
   <div class="faq-item">
-    <div class="faq-q">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      Can I interrupt and resume translation?
-    </div>
-    <div class="faq-a">Yes. Click <code>Stop</code> to pause. Translated content is cached, so resuming continues from where you left off.</div>
+    <div class="faq-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span data-i18n="faq3Q"></span></div>
+    <div class="faq-a" data-i18n="faq3A"></div>
   </div>
-
   <div class="faq-item">
-    <div class="faq-q">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      Why is my API Key showing as invalid?
-    </div>
-    <div class="faq-a">Check that your key is correct and your account has sufficient balance. You can regenerate a key at <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent)">DeepSeek Platform</a>.</div>
+    <div class="faq-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span data-i18n="faq4Q"></span></div>
+    <div class="faq-a" data-i18n="faq4A"></div>
   </div>
-
   <div class="faq-item">
-    <div class="faq-q">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      Will code blocks be translated?
-    </div>
-    <div class="faq-a">No. Code blocks (<code>&lt;pre&gt;</code>, <code>&lt;code&gt;</code>) are automatically detected and skipped. Only comments within code blocks may be translated.</div>
+    <div class="faq-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span data-i18n="faq5Q"></span></div>
+    <div class="faq-a" data-i18n="faq5A"></div>
   </div>
 
   <footer>
     <p>© Copyright 2026 老丁 · EPUB Translator</p>
   </footer>
-
 </div>
+
+<script>
+let lang = localStorage.getItem('epub-lang') || 'zh';
+
+const i18n = {
+  zh: {
+    back: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> 返回',
+    pageTitle: '使用指南',
+    pageSubtitle: '学习如何将 EPUB 电子书从英文翻译为中文',
+    step1Num: '第一步', step1Title: '安装 Python', step1Desc: '下载并安装 Python 3.10 或更高版本。安装时请勾选 <code>Add to PATH</code>。', step1Note: '下载地址：<a href="https://www.python.org/downloads/" target="_blank" style="color:var(--accent)">python.org/downloads</a>',
+    step2Num: '第二步', step2Title: '获取 API Key', step2Desc: '访问 DeepSeek 平台创建 API Key，用于调用翻译服务。', step2Note: '申请地址：<a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent)">platform.deepseek.com/api_keys</a>',
+    step3Num: '第三步', step3Title: '启动程序', step3Desc: '双击 <code>启动.bat</code>（Windows）或运行以下命令，浏览器会自动打开。', step3Note: '启动脚本首次运行时会自动安装依赖',
+    step4Num: '第四步', step4Title: '配置 API Key', step4Desc: '首次启动时，设置弹窗会自动弹出。输入你的 API Key 并点击「保存」。Key 会加密存储。', step4Note: '',
+    step5Num: '第五步', step5Title: '打开 EPUB 文件', step5Desc: '点击「打开新书」按钮或将 <code>.epub</code> 文件拖放到页面上。书籍信息（书名、作者、大小）将显示在卡片中。', step5Note: '',
+    step6Num: '第六步', step6Title: '开始翻译', step6Desc: '点击「开始翻译」按钮。底部进度条实时显示翻译状态。', step6Note: '',
+    step7Num: '第七步', step7Title: '下载结果', step7Desc: '翻译完成后，点击「下载」按钮保存翻译好的 EPUB 文件。', step7Note: '',
+    modesTitle: '翻译模式', modesDesc: '<strong>🌐 中英双语（默认）：</strong>保留英文原文，下方添加中文翻译。适合语言学习。<br><br><strong>🇨🇳 仅中文：</strong>将英文替换为中文。生成纯中文 EPUB。',
+    securityTitle: '安全特性', securityDesc: '<strong>🔒 API Key 加密：</strong>使用 AES-128 加密存储。<br><strong>🗑️ 自动清理：</strong>上传文件翻译完成后自动删除。<br><strong>🏠 本地处理：</strong>所有数据在本地处理，不发送到第三方。',
+    faqTitle: '常见问题',
+    faq1Q: '这个工具使用什么 API？', faq1A: '默认使用 DeepSeek API。你可以在设置中修改 API 地址和模型，兼容任何 OpenAI 兼容的 API。',
+    faq2Q: '支持什么文件格式？', faq2A: '仅支持 <code>.epub</code> 文件。工具会保留所有格式、图片、链接和目录结构。',
+    faq3Q: '可以中断并恢复翻译吗？', faq3A: '可以。点击「停止」暂停。已翻译内容会被缓存，恢复时从断点继续。',
+    faq4Q: 'API Key 显示无效怎么办？', faq4A: '请检查 Key 是否正确，账户是否有余额。你可以在 <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent)">DeepSeek 平台</a> 重新生成 Key。',
+    faq5Q: '代码块会被翻译吗？', faq5A: '不会。<code>&lt;pre&gt;</code>、<code>&lt;code&gt;</code> 等代码块会自动识别并跳过。',
+  },
+  en: {
+    back: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back',
+    pageTitle: 'User Guide',
+    pageSubtitle: 'Learn how to translate your EPUB books from English to Chinese',
+    step1Num: 'Step 1', step1Title: 'Install Python', step1Desc: 'Download and install Python 3.10 or later. Make sure to check <code>Add to PATH</code> during installation.', step1Note: 'Download: <a href="https://www.python.org/downloads/" target="_blank" style="color:var(--accent)">python.org/downloads</a>',
+    step2Num: 'Step 2', step2Title: 'Get Your API Key', step2Desc: 'Visit DeepSeek Platform to create an API Key for the translation service.', step2Note: 'Apply: <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent)">platform.deepseek.com/api_keys</a>',
+    step3Num: 'Step 3', step3Title: 'Start the Application', step3Desc: 'Double-click <code>启动.bat</code> (Windows) or run the command below. The browser opens automatically.', step3Note: 'The startup script auto-installs dependencies on first run',
+    step4Num: 'Step 4', step4Title: 'Configure API Key', step4Desc: 'On first launch, a settings popup appears automatically. Enter your API Key and click <code>Save</code>. The key is stored encrypted.', step4Note: '',
+    step5Num: 'Step 5', step5Title: 'Open an EPUB File', step5Desc: 'Click <code>Open a New Book</code> or drag and drop an <code>.epub</code> file. Book info (title, author, size) is displayed.', step5Note: '',
+    step6Num: 'Step 6', step6Title: 'Start Translation', step6Desc: 'Click the <code>Start Translation</code> button. The progress bar shows real-time status.', step6Note: '',
+    step7Num: 'Step 7', step7Title: 'Download the Result', step7Desc: 'When translation completes, click <code>Download</code> to save the translated EPUB.', step7Note: '',
+    modesTitle: 'Translation Modes', modesDesc: '<strong>🌐 Bilingual (default):</strong> Keeps original English and adds Chinese below. Great for language learning.<br><br><strong>🇨🇳 Chinese Only:</strong> Replaces English with Chinese. Produces a pure Chinese EPUB.',
+    securityTitle: 'Security', securityDesc: '<strong>🔒 Encrypted API Key:</strong> AES-128 encryption before storage.<br><strong>🗑️ Auto Cleanup:</strong> Uploaded files deleted after translation.<br><strong>🏠 Local Processing:</strong> All data processed locally.',
+    faqTitle: 'FAQ',
+    faq1Q: 'What API does this tool use?', faq1A: 'By default DeepSeek API. You can switch to any OpenAI-compatible API by changing the Base URL and Model in settings.',
+    faq2Q: 'What file formats are supported?', faq2A: 'Only <code>.epub</code> files. All formatting, images, links, and TOC are preserved.',
+    faq3Q: 'Can I interrupt and resume?', faq3A: 'Yes. Click <code>Stop</code> to pause. Translated content is cached, so resuming continues from where you left off.',
+    faq4Q: 'Why is my API Key invalid?', faq4A: 'Check your key and account balance. Regenerate at <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent)">DeepSeek Platform</a>.',
+    faq5Q: 'Will code blocks be translated?', faq5A: 'No. <code>&lt;pre&gt;</code>, <code>&lt;code&gt;</code> blocks are auto-detected and skipped.',
+  }
+};
+
+function t(key) { return i18n[lang][key] || key; }
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('epub-lang', l);
+  document.getElementById('lang-zh').classList.toggle('active', l === 'zh');
+  document.getElementById('lang-en').classList.toggle('active', l === 'en');
+  document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
+  document.title = l === 'zh' ? '使用指南 - EPUB Translator' : 'User Guide - EPUB Translator';
+  applyLang();
+}
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if (val.includes('<') || val.includes('&lt;')) el.innerHTML = val;
+    else el.textContent = val;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => { setLang(lang); });
+</script>
 </body>
 </html>
