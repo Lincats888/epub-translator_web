@@ -279,6 +279,7 @@ const i18n = {
     transStopped: '翻译已停止',
     transFailed: '翻译失败',
     notConfigured: '未配置',
+    applyKey: '点击申请 API Key',
     currentKey: '当前：',
     encrypted: 'API Key 已加密存储',
     apiKeyWarning: '请先输入 API Key 才能使用翻译功能',
@@ -318,6 +319,7 @@ const i18n = {
     transStopped: 'Translation stopped',
     transFailed: 'Translation failed',
     notConfigured: 'Not configured',
+    applyKey: 'Apply for API Key',
     currentKey: 'Current: ',
     encrypted: 'API Key is encrypted',
     apiKeyWarning: 'Please enter your API Key to use the translation feature',
@@ -372,7 +374,9 @@ function openSettings() {
     document.getElementById('cfg-base').value = c.api_base||'';
     document.getElementById('cfg-model').value = c.model||'';
     document.getElementById('cfg-mode').value = c.translation_mode||'bilingual';
-    document.getElementById('cfg-key-hint').textContent = c.api_key_set ? t('currentKey')+c.api_key_masked : t('notConfigured');
+    document.getElementById('cfg-key-hint').innerHTML = c.api_key_set
+      ? t('currentKey')+c.api_key_masked
+      : t('notConfigured') + ' — <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent);text-decoration:underline;">' + t('applyKey') + '</a>';
     const badge = document.getElementById('cfg-encrypted-badge');
     badge.style.display = (c.api_key_set && c.api_key_encrypted) ? 'inline-block' : 'none';
     const warning = document.getElementById('api-key-warning');
