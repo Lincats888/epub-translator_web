@@ -200,13 +200,15 @@
     </div>
     <div class="modal-body">
       <div class="field">
-        <label data-i18n="apiKeyLabel"></label>
+        <label>
+          <span data-i18n="apiKeyLabel"></span>
+          <span id="cfg-encrypted-badge" style="display:none; margin-left:8px; font-size:11px; font-weight:600; color:#5DAA7E; background:#E8F5EE; padding:2px 8px; border-radius:6px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px; margin-right:2px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            <span data-i18n="encrypted"></span>
+          </span>
+        </label>
         <input id="cfg-key" type="password" placeholder="sk-xxxxxxxxxxxx">
         <div class="field-hint" id="cfg-key-hint"></div>
-        <div id="cfg-encrypted-badge" style="display:none; margin-top:6px; font-size:11px; color:#5DAA7E; display:none; align-items:center; gap:4px;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-          <span data-i18n="encrypted"></span>
-        </div>
       </div>
       <div class="field">
         <label data-i18n="apiBaseLabel"></label>
@@ -353,7 +355,7 @@ function openSettings() {
     document.getElementById('cfg-mode').value = c.translation_mode||'bilingual';
     document.getElementById('cfg-key-hint').textContent = c.api_key_set ? t('currentKey')+c.api_key_masked : t('notConfigured');
     const badge = document.getElementById('cfg-encrypted-badge');
-    badge.style.display = (c.api_key_set && c.api_key_encrypted) ? 'flex' : 'none';
+    badge.style.display = (c.api_key_set && c.api_key_encrypted) ? 'inline-block' : 'none';
     document.getElementById('settings-modal').classList.add('active');
   });
 }
