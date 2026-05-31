@@ -35,16 +35,81 @@ pytest tests/ --cov=epub_translator  # 带覆盖率
 ```
 main.py                          # CLI 入口，编排整个翻译流程
 epub_translator/                 # 核心库（不应直接修改）
-  config.py                      # YAML 配置加载，Config 类
+  config.py                      # YAML 配置加载，Config 类（自动解密 api_key）
+  crypto.py                      # Fernet AES 加密：API Key 加密存储
   extractor.py                   # EpubExtractor：解压 EPUB 到 temp/，基于 MD5 哈希跳过重复解压
   parser.py                      # HTML/XHTML/NCX/OPF 解析 → ParsedFile + TextFragment 列表
   translator.py                  # Translator：通过 OpenAI SDK 调用 DeepSeek API，并发批量翻译
   cache.py                       # TranslationCache：MD5 哈希 → 翻译 JSON 缓存，支持增量运行
   rebuilder.py                   # 重建 EPUB：mimetype 优先 + STORED，其他文件 DEFLATED
+handlers/                        # 文件格式适配器（BaseHandler 抽象基类）
+  epub_handler.py                # EPUB：封装现有 epub_translator
+  docx_handler.py                # DOCX：python-docx，保留段落/表格/格式
+  pdf_handler.py                 # PDF：PyMuPDF，双语输出为交替页面
+languages/                       # 多语种支持
+  registry.py                    # 30 种语言注册表
+  detector.py                    # 源语言检测（langdetect），同语种跳过
+  prompts.py                     # 按目标语言动态生成翻译提示词
 server/                          # Web 界面（FastAPI + SSE）
-  server.py                      # 后端：上传/元数据/预览/翻译控制/进度/下载/配置 API
-  index.html                     # 前端：极简风格单页应用
+  server.py                      # 后端：多格式分发、翻译控制、SSE 进度、语言 API
+  index.html                     # 前端：极简 2.0 风格，中英双语切换
+  guide.html                     # 使用指南页面（含截图）
 ```
+
+## Handler 架构
+
+所有文件格式通过 `BaseHandler` 抽象基类统一处理：
+
+```python
+class BaseHandler(ABC):
+    def supported_extensions() -> list[str]  # 如 ['.epub']
+    def extract(file_path) -> list[TextFragment]  # 提取可翻译片段
+    def rebuild(file_path, fragments, translations, bilingual, target_lang) -> str  # 回写
+```
+
+- **注册机制**：`handlers/__init__.py` 自动扫描所有 Handler，按扩展名分发
+- **新增格式**：只需新建 Handler 类并在 `__init__.py` 注册，不影响现有代码
+- **EPUB 特殊处理**：不走通用翻译流程，直接在 `server.py` 中调用原有 `_run_translate`
+
+## 多语种支持
+
+- **30 种语言**（`languages/registry.py`）：中/英/日/韩/法/德/西/俄/阿...
+- **源语言检测**（`langdetect`）：检测原文语种，若与目标语种相同则跳过翻译
+- **动态提示词**：根据目标语言生成翻译 system prompt
+- **API**：`GET /api/languages?ui=zh|en` 返回语言列表
+- **前端**：下拉框选择目标语言 + 双语/目标语言模式
+
+## PDF 翻译细节
+
+### 文字提取
+- 使用 PyMuPDF (fitz)，逐页处理，不一次性全部加载
+- 每个 PyMuPDF 文字块（block）作为独立片段，不跨块合并
+- 检测扫描版 PDF（>70% 页面无文字）→ 直接报错
+
+### 代码检测
+- 与 DOCX 共用代码检测逻辑（Python/Java/C++/SQL/Pascal 等）
+- 单行代码也可识别
+
+### 中文渲染
+- 使用系统 CJK 字体（SimHei 黑体优先，微软雅黑备选）
+- 字体通过 `page.insert_font()` 嵌入 PDF
+- `insert_pdf()` 批量合并时自动去重，控制文件大小
+
+### 双语模式
+- 输出为交替页面：Page 0=英文，Page 1=中文，Page 2=英文...
+- 使用 `insert_pdf()` 批量插入 + `move_page()` 重排实现
+- 页面级按比例缩放字号，所有内容自适应页面空间
+
+### 排版
+- `_rebuild_replace()`：按页面整体计算所需行数，均匀缩放字号
+- `_wrap_text()`：混合中英文智能换行（含空格按词换行，无空格按字符换行）
+
+## API Key 加密
+
+- API Key 使用 Fernet（AES-128-CBC + HMAC）加密后存入 `config.yaml`
+- 加密密钥存储在 `.secret` 文件（已 gitignore）
+- `Config.api_key` 属性自动解密
+- Web 设置页面显示绿色锁图标和"已加密存储"标签
 
 ## 翻译流水线
 
@@ -110,13 +175,15 @@ Web 界面也可通过设置弹窗修改配置（齿轮图标 → `POST /api/con
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/` | GET | 前端页面 |
-| `/api/upload` | POST | 上传 EPUB，返回元数据（书名/作者/封面/目录） |
-| `/api/book/{id}/content?path=` | GET | 获取章节 HTML 内容用于预览 |
-| `/api/start/{id}` | POST | 开始翻译（后台线程） |
+| `/guide` | GET | 使用指南页面 |
+| `/api/upload` | POST | 上传文件（.epub/.docx/.pdf），返回元数据 |
+| `/api/start/{id}` | POST | 开始翻译（body: target_lang, bilingual） |
 | `/api/stop/{id}` | POST | 停止翻译 |
 | `/api/progress/{id}` | GET | SSE 流，实时推送翻译进度 |
-| `/api/download/{id}` | GET | 下载翻译完成的 EPUB |
-| `/api/config` | GET/POST | 读取/更新配置 |
+| `/api/download/{id}` | GET | 下载翻译完成的文件 |
+| `/api/languages?ui=` | GET | 获取语种列表 |
+| `/api/formats` | GET | 获取支持的文件格式 |
+| `/api/config` | GET/POST | 读取/更新配置（含加密 Key） |
 
 ## 目录结构约定
 
@@ -131,5 +198,6 @@ Web 界面也可通过设置弹窗修改配置（齿轮图标 → `POST /api/con
 ## 依赖
 
 - Python 3.10+
-- 核心：beautifulsoup4, lxml, openai, pyyaml, tqdm
+- 核心：beautifulsoup4, lxml, openai, pyyaml, tqdm, cryptography, langdetect
 - Web 服务：fastapi, uvicorn, python-multipart
+- 格式处理：python-docx, PyMuPDF

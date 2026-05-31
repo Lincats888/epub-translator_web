@@ -26,7 +26,9 @@ config.yaml
 .DS_Store
 Thumbs.db
 
-# EPUB test files
+# Uploaded files
 *.epub
+*.pdf
+*.docx
 !tests/fixtures/*.epub
 nonexistent*.yaml

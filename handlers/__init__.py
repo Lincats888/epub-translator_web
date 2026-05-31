@@ -12,10 +12,11 @@ from typing import Dict, Type, Optional, List
 from .base import BaseHandler
 from .epub_handler import EpubHandler
 from .docx_handler import DocxHandler
+from .pdf_handler import PdfHandler
 
 # Build registry: extension -> handler class
 _REGISTRY = {}  # type: Dict[str, Type[BaseHandler]]
-for _handler_cls in [EpubHandler, DocxHandler]:
+for _handler_cls in [EpubHandler, DocxHandler, PdfHandler]:
     for _ext in _handler_cls.supported_extensions():
         _REGISTRY[_ext.lower()] = _handler_cls
 

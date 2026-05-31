@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EPUB Translator</title>
+  <title>EbookTranslator</title>
   <link rel="preconnect" href="https://fonts.loli.net">
   <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -20,8 +20,7 @@
 
     /* Header */
     header { padding: 40px 0 32px; display: flex; align-items: center; gap: 12px; }
-    .logo { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; flex: 1; }
-    .logo span { color: var(--accent); }
+    .logo { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; flex: 1; color: var(--accent); }
 
     /* Lang Toggle */
     .lang-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; }
@@ -113,7 +112,7 @@
 <div class="app">
   <!-- Header -->
   <header>
-    <div class="logo">EPUB <span>Translator</span></div>
+    <div class="logo">EbookTranslator</div>
     <div class="lang-toggle">
       <button id="lang-zh" class="active" onclick="setLang('zh')">中</button>
       <button id="lang-en" onclick="setLang('en')">EN</button>
@@ -127,7 +126,7 @@
     </button>
   </header>
 
-  <input type="file" id="file-input" accept=".epub,.docx" style="display:none" onchange="handleFile(this.files[0])">
+  <input type="file" id="file-input" accept=".epub,.docx,.pdf" style="display:none" onchange="handleFile(this.files[0])">
 
   <!-- Welcome -->
   <div class="welcome" id="welcome-view">
@@ -138,7 +137,7 @@
       <h2 data-i18n="welcomeTitle"></h2>
       <p data-i18n="welcomeDesc"></p>
       <div class="upload-zone" id="upload-zone">
-        <input type="file" accept=".epub,.docx" onchange="handleFile(this.files[0])">
+        <input type="file" accept=".epub,.docx,.pdf" onchange="handleFile(this.files[0])">
         <p><strong data-i18n="dropHere"></strong><br><span data-i18n="orBrowse"></span></p>
       </div>
     </div>
@@ -163,9 +162,13 @@
             <span id="book-date">—</span>
           </div>
         </div>
-        <div style="margin-top:16px; display:flex; align-items:center; gap:8px;">
+        <div style="margin-top:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
           <span style="font-size:13px; color:var(--text2);" data-i18n="targetLang"></span>
           <select id="target-lang" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
+          </select>
+          <select id="trans-mode" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
+            <option value="bilingual">双语</option>
+            <option value="target_only">目标语言</option>
           </select>
         </div>
         <div class="book-actions">
@@ -254,10 +257,10 @@ let lang = localStorage.getItem('epub-lang') || 'zh';
 
 const i18n = {
   zh: {
-    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> 打开新书',
-    welcomeTitle: '翻译你的 EPUB',
-    welcomeDesc: '将 EPUB 文件拖放到这里，然后一键<br>将英文翻译为中文。',
-    dropHere: '将 EPUB 拖放到这里',
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> 打开文件',
+    welcomeTitle: '翻译你的电子书',
+    welcomeDesc: '支持 EPUB、Word、PDF 文档<br>拖放到这里一键翻译为任意语言。',
+    dropHere: '将文件拖放到这里',
     orBrowse: '或点击选择文件',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始翻译',
     targetLang: '目标语言：',
@@ -265,6 +268,7 @@ const i18n = {
     downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载',
     translating: '翻译中...',
     files: '个文件',
+    fragments: '个片段',
     done: '翻译完成！',
     stopped: '已停止',
     settingsTitle: 'API 设置',
@@ -272,8 +276,8 @@ const i18n = {
     apiBaseLabel: 'API 地址',
     modelLabel: '模型',
     modeLabel: '翻译模式',
-    modeBilingual: '中英双语（保留原文 + 中文翻译）',
-    modeChineseOnly: '仅中文（替换原文）',
+    modeBilingual: '双语（原文 + 译文）',
+    modeChineseOnly: '目标语言（只保留译文）',
     cancel: '取消',
     save: '保存',
     saving: '保存中...',
@@ -281,7 +285,7 @@ const i18n = {
     loadBook: '加载中...',
     bookLoaded: '书籍已加载',
     uploadFail: '上传失败：',
-    selectEpub: '请选择 .epub 文件',
+    selectFile: '请选择 .epub、.docx 或 .pdf 文件',
     startFail: '启动失败：',
     fileTooLarge: '文件过大（最大 100 MB）',
     transComplete: '翻译完成！',
@@ -295,10 +299,10 @@ const i18n = {
     disclaimer: '本工具仅供个人学习和研究使用。翻译结果由 AI 模型生成，可能存在不准确之处，仅供参考。上传的文件将在翻译完成后自动删除，请勿上传涉及版权争议的内容。使用本工具即表示您接受以上条款。',
   },
   en: {
-    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Open a New Book',
-    welcomeTitle: 'Translate Your EPUB',
-    welcomeDesc: 'Drop an EPUB file here, then start translating<br>English to Chinese with one click.',
-    dropHere: 'Drop your EPUB here',
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Open File',
+    welcomeTitle: 'Translate Your Documents',
+    welcomeDesc: 'Supports EPUB, Word and PDF documents.<br>Drop a file here to translate into any language.',
+    dropHere: 'Drop your file here',
     orBrowse: 'or click to browse',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation',
     targetLang: 'Target: ',
@@ -306,6 +310,7 @@ const i18n = {
     downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download',
     translating: 'Translating...',
     files: 'files',
+    fragments: 'fragments',
     done: 'Translation complete!',
     stopped: 'Stopped',
     settingsTitle: 'API Settings',
@@ -313,8 +318,8 @@ const i18n = {
     apiBaseLabel: 'API Base URL',
     modelLabel: 'Model',
     modeLabel: 'Translation Mode',
-    modeBilingual: 'Bilingual (English + Chinese)',
-    modeChineseOnly: 'Chinese Only',
+    modeBilingual: 'Bilingual (Original + Translation)',
+    modeChineseOnly: 'Target Language Only',
     cancel: 'Cancel',
     save: 'Save',
     saving: 'Saving...',
@@ -322,7 +327,7 @@ const i18n = {
     loadBook: 'Loading...',
     bookLoaded: 'Book loaded',
     uploadFail: 'Upload failed: ',
-    selectEpub: 'Please select an .epub file',
+    selectFile: 'Please select an .epub, .docx or .pdf file',
     startFail: 'Failed to start: ',
     fileTooLarge: 'File too large (max 100 MB)',
     transComplete: 'Translation complete!',
@@ -444,7 +449,8 @@ if (uz) {
 
 function handleFile(file) {
   if (!file) return;
-  if (!file.name.toLowerCase().endsWith('.epub')) { toast(t('selectEpub'),'error'); return; }
+  const ext = file.name.toLowerCase().split('.').pop();
+  if (!['epub','docx','pdf'].includes(ext)) { toast(t('selectFile'),'error'); return; }
   if (file.size > 100*1024*1024) { toast(t('fileTooLarge'),'error'); return; }
   const form = new FormData(); form.append('file', file);
   toast(t('loadBook'),'');
@@ -485,10 +491,11 @@ function toggleTranslation() {
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Starting...';
     btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
     const targetLang = document.getElementById('target-lang').value;
+    const transMode = document.getElementById('trans-mode').value;
     fetch(`/api/start/${taskId}`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({target_lang: targetLang})
+      body:JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual'})
     }).then(r=>r.json()).then(() => {
       btn.disabled = false; showStopButton(); startProgress();
     }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });
@@ -524,11 +531,15 @@ function startProgress() {
   eventSource.onmessage = e => {
     const d = JSON.parse(e.data);
     if (d.status === 'translating') {
-      const done = d.current_file||0, total = d.total_files||0;
+      // EPUB: file count for progress. DOCX/PDF: fragment count
+      const multiFile = (d.total_files||0) > 1;
+      const done = multiFile ? (d.current_file||0) : (d.file_progress||0);
+      const total = multiFile ? (d.total_files||0) : (d.file_total||0);
       const pct = total>0 ? Math.round(done/total*100) : 0;
+      const unit = multiFile ? t('files') : t('fragments');
       document.getElementById('progress-fill').style.width = pct+'%';
       document.getElementById('progress-pct').textContent = pct+'%';
-      document.getElementById('progress-files').innerHTML = `${done} / ${total} ${t('files')}`;
+      document.getElementById('progress-files').innerHTML = `${done} / ${total} ${unit}`;
       document.getElementById('progress-label').textContent = d.file_name ? d.file_name.split('/').pop() : t('translating');
       showStopButton();
     } else if (d.status === 'done') { finishProgress(d); }

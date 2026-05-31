@@ -39,7 +39,6 @@ from epub_translator.rebuilder import inject_line_height, rebuild_epub
 from epub_translator.crypto import encrypt, decrypt, is_encrypted
 
 from handlers import get_handler, get_supported_extensions, is_supported
-from handlers.docx_handler import DocxHandler
 from languages import get_all_languages, get_lang_name, detect_language, get_system_prompt
 
 # ── App & State ────────────────────────────────────────────────────────
@@ -330,8 +329,9 @@ def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN"):
         _update(task_id, status="error", error=str(e))
 
 
-def _run_translate_docx(task_id: str, file_path: str, target_lang: str = "zh-CN"):
-    """Background DOCX translation using docx_handler."""
+def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-CN",
+                           bilingual: bool = True):
+    """Background translation for DOCX/PDF using handlers."""
     try:
         _update(task_id, status="loading", step="Loading configuration...")
         config = Config(CONFIG_PATH)
@@ -341,8 +341,12 @@ def _run_translate_docx(task_id: str, file_path: str, target_lang: str = "zh-CN"
             return
 
         _update(task_id, step="Extracting document...")
-        handler = DocxHandler()
-        fragments = handler.extract(file_path, bilingual=(config.translation_mode == "bilingual"))
+        handler = get_handler(file_path)
+        if handler is None:
+            _update(task_id, status="error", error="Unsupported file format.")
+            return
+
+        fragments = handler.extract(file_path, bilingual=bilingual)
 
         if not fragments:
             _update(task_id, status="error", error="No translatable content found.")
@@ -358,32 +362,37 @@ def _run_translate_docx(task_id: str, file_path: str, target_lang: str = "zh-CN"
         from languages.detector import is_same_language
         if is_same_language(sample_text, target_lang):
             _update(task_id, status="error",
-                    error=f"Source language ({source_lang}) is the same as target language ({target_lang}). Nothing to translate.")
+                    error=f"Source language ({source_lang}) matches target ({target_lang}). Nothing to translate.")
             return
 
-        # Translate
+        # Translate batch by batch for smooth progress
         total = len(fragments)
         translator_obj = Translator(config)
-        is_bilingual = config.translation_mode == "bilingual"
+        batch_size = config.batch_size
 
         _update(task_id, status="translating", step="Translating...",
                 current_file=0, total_files=1,
                 file_name=os.path.basename(file_path),
                 file_progress=0, file_total=total)
 
-        texts = [f.text for f in fragments]
-        progress_state = {"count": 0}
+        all_translations = []
 
-        def on_progress(done, _total=total):
-            progress_state["count"] = min(done, _total)
-            _update(task_id, file_progress=progress_state["count"], file_total=_total)
+        for i in range(0, total, batch_size):
+            if _tasks.get(task_id, {}).get("stopped"):
+                _update(task_id, status="stopped", step="Stopped by user")
+                return
 
-        translations = translator_obj.translate_all(texts, progress_callback=on_progress)
+            batch = [f.text for f in fragments[i:i + batch_size]]
+            result = translator_obj.translate_batch(batch)
+            all_translations.extend(result)
+
+            done_count = min(i + batch_size, total)
+            _update(task_id, file_progress=done_count, file_total=total)
 
         _update(task_id, step="Rebuilding document...")
         output_path = handler.rebuild(
-            file_path, fragments, translations,
-            bilingual=is_bilingual, target_lang=target_lang
+            file_path, fragments, all_translations,
+            bilingual=bilingual, target_lang=target_lang
         )
 
         _update(task_id, status="done", step="Complete!",
@@ -468,19 +477,22 @@ async def start_translation(task_id: str, body: dict = None):
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(404, "File not found")
 
-    # Get target language from request body
+    # Get target language and mode from request body
     target_lang = "zh-CN"
-    if body and "target_lang" in body:
-        target_lang = body["target_lang"]
+    bilingual = True
+    if body:
+        target_lang = body.get("target_lang", target_lang)
+        bilingual = body.get("bilingual", True)
 
     _update(task_id, status="queued", step="Starting...", stopped=False,
-            target_lang=target_lang)
+            target_lang=target_lang, bilingual=bilingual)
 
     file_type = task.get("file_type", ".epub")
     if file_type == ".epub":
         _executor.submit(_run_translate, task_id, file_path, target_lang)
     else:
-        _executor.submit(_run_translate_docx, task_id, file_path, target_lang)
+        _executor.submit(_run_translate_generic, task_id, file_path,
+                         target_lang, bilingual)
 
     return {"ok": True}
 

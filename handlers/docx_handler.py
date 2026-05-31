@@ -1,17 +1,16 @@
 """DOCX handler — translate Word documents using python-docx.
 
-Extracts paragraphs and table cells as individual fragments.
-Rebuild preserves formatting (bold, italic, font size, color, etc.).
+Extracts paragraphs (including headings), table cells as individual fragments.
+Rebuild preserves all formatting (bold, italic, font size, color, heading styles, etc.)
 Does NOT add lang attributes — only preserves original format.
 """
 
 import os
+import re
 import shutil
-from copy import deepcopy
 
 from .base import BaseHandler, TextFragment
 
-# Lazy import for faster startup when docx isn't used
 _docx = None
 
 
@@ -23,32 +22,29 @@ def _get_docx():
     return _docx
 
 
-# ── Skip patterns for code-like content ────────────────────────────
-import re
+# ── Skip patterns ───────────────────────────────────────────────────
 _CODE_PATTERNS = (
-    re.compile(r'^\s*[{}\[\];]'),          # lines starting with { } [ ] ;
-    re.compile(r'^\s*(import |from |def |class |if |for |while )'),  # Python
-    re.compile(r'^\s*(public |private |void |int |string )'),        # Java/C#
-    re.compile(r'^\s*(#include|using namespace)'),                    # C++
-    re.compile(r'^\s*<[^>]+>'),             # HTML/XML tags
-    re.compile(r'^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE)\s', re.I),  # SQL
+    re.compile(r'^\s*[{}\[\];]'),
+    re.compile(r'^\s*(import |from |def |class |if |for |while )'),
+    re.compile(r'^\s*(public |private |void |int |string )'),
+    re.compile(r'^\s*(#include|using namespace)'),
+    re.compile(r'^\s*<[^>]+>'),
+    re.compile(r'^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE)\s', re.I),
 )
 
 
-def _is_code_like(text: str) -> bool:
-    """Heuristic: does this text look like code rather than prose?"""
+def _is_code_like(text):
     if not text or len(text.strip()) < 3:
         return False
     lines = text.strip().split('\n')
     if len(lines) > 2:
-        code_lines = sum(1 for line in lines if any(p.search(line) for p in _CODE_PATTERNS))
+        code_lines = sum(1 for l in lines if any(p.search(l) for p in _CODE_PATTERNS))
         if code_lines / len(lines) > 0.4:
             return True
     return False
 
 
-def _is_translatable(text: str) -> bool:
-    """Check if text is worth translating (has actual language content)."""
+def _is_translatable(text):
     stripped = text.strip()
     if not stripped or len(stripped) < 2:
         return False
@@ -59,35 +55,78 @@ def _is_translatable(text: str) -> bool:
     return True
 
 
-# ── Handler ────────────────────────────────────────────────────────
+# ── Run formatting helpers ──────────────────────────────────────────
+
+def _copy_run_format(source_run, target_run):
+    """Copy all formatting from source run to target run (XML level)."""
+    from docx.oxml.ns import qn
+
+    # Get or create rPr (run properties) on target
+    source_rPr = source_run._r.find(qn("w:rPr"))
+    if source_rPr is not None:
+        # Clone the rPr element
+        target_rPr = source_rPr.__class__(source_rPr.tag)
+        target_rPr.attrib = dict(source_rPr.attrib)
+        for child in source_rPr:
+            target_rPr.append(child.__class__(child.tag, child.attrib, child.text))
+        # Replace target's rPr
+        existing = target_run._r.find(qn("w:rPr"))
+        if existing is not None:
+            target_run._r.remove(existing)
+        target_run._r.insert(0, target_rPr)
+
+
+def _copy_para_format(source_para, target_para):
+    """Copy paragraph formatting (style, alignment, spacing, etc.)."""
+    from docx.oxml.ns import qn
+
+    # Copy paragraph style
+    if hasattr(source_para, 'style') and source_para.style:
+        target_para.style = source_para.style
+
+    # Copy paragraph format properties (alignment, indent, spacing)
+    src_pPr = source_para._p.find(qn("w:pPr"))
+    if src_pPr is not None:
+        tgt_pPr = target_para._p.find(qn("w:pPr"))
+        if tgt_pPr is None:
+            tgt_pPr = src_pPr.__class__(qn("w:pPr"))
+            target_para._p.insert(0, tgt_pPr)
+        # Copy alignment, spacing, indent
+        for tag in ("w:spacing", "w:ind", "w:jc", "w:keepLines", "w:keepNext"):
+            elem = src_pPr.find(qn(tag))
+            if elem is not None:
+                existing = tgt_pPr.find(qn(tag))
+                if existing is not None:
+                    tgt_pPr.remove(existing)
+                tgt_pPr.append(elem.__class__(elem.tag, dict(elem.attrib)))
+
+
+# ── Handler ─────────────────────────────────────────────────────────
 
 class DocxHandler(BaseHandler):
     """Handler for .docx Word documents."""
 
     @staticmethod
-    def supported_extensions() -> list[str]:
+    def supported_extensions():
         return [".docx"]
 
-    def extract(self, file_path: str, skip_tags: list[str] = None,
-                bilingual: bool = True) -> list[TextFragment]:
-        """Extract translatable fragments from a .docx file.
-
-        Strategy: iterate paragraphs and table cells. For each, extract
-        the full text. Store a reference path (index-based) in meta
-        so rebuild can find the exact element to modify.
-        """
+    def extract(self, file_path, skip_tags=None, bilingual=True):
+        """Extract all translatable content: paragraphs, headings, TOC entries, table cells."""
         docx = _get_docx()
         doc = docx.Document(file_path)
         fragments = []
 
-        # 1. Extract paragraphs
+        # 1. Extract ALL paragraphs (headings, normal text, TOC entries)
         for i, para in enumerate(doc.paragraphs):
             text = para.text.strip()
             if not _is_translatable(text):
                 continue
+            style_name = para.style.name if para.style else "Normal"
+            is_toc = style_name.startswith("TOC")
             fragments.append(TextFragment(
                 text=text,
-                meta={"type": "paragraph", "index": i},
+                meta={"type": "paragraph", "index": i,
+                       "style": style_name, "is_toc": is_toc},
             ))
 
         # 2. Extract table cells
@@ -97,9 +136,8 @@ class DocxHandler(BaseHandler):
                     text = cell.text.strip()
                     if not _is_translatable(text):
                         continue
-                    # Avoid duplicates: only extract from the first cell
-                    # in a merged cell group
-                    if cell._tc != row.cells[ci]._tc:
+                    # Skip duplicate merged cells
+                    if ci > 0 and cell._tc is row.cells[ci - 1]._tc:
                         continue
                     fragments.append(TextFragment(
                         text=text,
@@ -108,49 +146,42 @@ class DocxHandler(BaseHandler):
 
         return fragments
 
-    def rebuild(self, file_path: str, fragments: list[TextFragment],
-                translations: list[str], bilingual: bool,
-                target_lang: str = "zh-CN") -> str:
-        """Write translations back to the document.
-
-        Performance notes:
-        - Paragraphs: iterate once, match by index, insert after if bilingual
-        - Tables: iterate cells, write directly (no insert needed)
-        - Formatting: copy runs from original to translated paragraph
-        """
+    def rebuild(self, file_path, fragments, translations, bilingual,
+                target_lang="zh-CN"):
+        """Write translations back, preserving all formatting."""
         docx = _get_docx()
-
-        # Work on a copy
         output_path = self._output_path(file_path)
         shutil.copy2(file_path, output_path)
-
         doc = docx.Document(output_path)
 
-        # Build translation lookup: meta_key → translation
+        # Build lookup
         trans_map = {}
         for frag, trans in zip(fragments, translations):
-            key = self._meta_key(frag.meta)
-            trans_map[key] = trans
+            trans_map[self._meta_key(frag.meta)] = trans
 
-        # 1. Process paragraphs (reverse order for safe insertion)
-        para_inserts = []  # (insert_after_index, translation, style)
+        # 1. Paragraphs — process in reverse for safe insertion
+        para_inserts = []
         for i, para in enumerate(doc.paragraphs):
             key = f"paragraph_{i}"
             if key not in trans_map:
                 continue
             trans = trans_map[key]
-            if bilingual:
-                # Record insertion point (do it after the loop to avoid index shift)
+            meta = fragments[[self._meta_key(f.meta) for f in fragments].index(key)].meta if key in trans_map else {}
+
+            if meta.get("is_toc"):
+                # TOC entry: update cached field text
+                self._update_toc_entry(para, trans)
+                if bilingual:
+                    para_inserts.append((para, trans))
+            elif bilingual:
                 para_inserts.append((para, trans))
             else:
-                # Replace original text, keep first run's formatting
                 self._replace_para_text(para, trans)
 
-        # Insert translated paragraphs (reverse to preserve indices)
         for para, trans in reversed(para_inserts):
-            new_para = self._insert_para_after(para, trans)
+            self._insert_para_after(para, trans)
 
-        # 2. Process tables
+        # 2. Table cells
         for ti, table in enumerate(doc.tables):
             for ri, row in enumerate(table.rows):
                 for ci, cell in enumerate(row.cells):
@@ -159,10 +190,8 @@ class DocxHandler(BaseHandler):
                         continue
                     trans = trans_map[key]
                     if bilingual:
-                        # Append to cell: keep original, add translation below
                         self._append_cell_translation(cell, trans)
                     else:
-                        # Replace cell content
                         self._replace_cell_text(cell, trans)
 
         doc.save(output_path)
@@ -171,69 +200,98 @@ class DocxHandler(BaseHandler):
     # ── Helpers ─────────────────────────────────────────────────────
 
     @staticmethod
-    def _meta_key(meta: dict) -> str:
+    def _meta_key(meta):
         if meta["type"] == "paragraph":
             return f"paragraph_{meta['index']}"
         return f"cell_{meta['table']}_{meta['row']}_{meta['col']}"
 
     @staticmethod
-    def _output_path(file_path: str) -> str:
+    def _output_path(file_path):
         base, ext = os.path.splitext(file_path)
         return f"{base}_translated{ext}"
 
     @staticmethod
-    def _replace_para_text(para, text: str):
-        """Replace paragraph text, keeping the first run's formatting."""
+    def _update_toc_entry(para, text):
+        """Update TOC cached text in XML field codes.
+
+        Word TOC entries use <w:fldChar> elements with nested <w:t> text.
+        This updates the display text while preserving the field structure.
+        """
+        from docx.oxml.ns import qn
+
+        # Find all w:t elements in the paragraph's XML
+        # and replace their text (preserving field code structure)
+        text_elements = para._p.findall(f".//{qn('w:t')}")
+        if text_elements:
+            # First w:t usually contains the visible TOC text
+            text_elements[0].text = text
+        else:
+            # Fallback: use para.runs
+            if para.runs:
+                para.runs[0].text = text
+                for run in para.runs[1:]:
+                    run.text = ""
+
+    @staticmethod
+    def _replace_para_text(para, text):
+        """Replace paragraph text, preserving ALL run formatting."""
         if not para.runs:
             para.text = text
             return
-        # Keep formatting of first run
+
+        # Write translation to first run (preserving its formatting)
         first_run = para.runs[0]
+        first_run.text = text
+        # Clear remaining runs
         for run in para.runs[1:]:
             run.text = ""
-        first_run.text = text
 
     @staticmethod
-    def _insert_para_after(para, text: str):
-        """Insert a new paragraph after the given one, copying its style."""
+    def _insert_para_after(para, text):
+        """Insert a new paragraph after the given one, copying style + formatting."""
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
+        from docx.text.paragraph import Paragraph
 
-        new_para = OxmlElement("w:p")
-        # Copy style from original
-        if para.paragraph_format.style:
-            pPr = new_para.find(qn("w:pPr"))
-            if pPr is None:
-                pPr = OxmlElement("w:pPr")
-                new_para.insert(0, pPr)
-            pStyle = OxmlElement("w:pStyle")
-            pStyle.set(qn("w:val"), para.paragraph_format.style.name)
-            pPr.append(pStyle)
+        new_p = OxmlElement("w:p")
 
-        # Add text run
+        # 1. Copy paragraph properties (style, alignment, spacing)
+        src_pPr = para._p.find(qn("w:pPr"))
+        if src_pPr is not None:
+            # Deep clone pPr
+            import copy
+            tgt_pPr = copy.deepcopy(src_pPr)
+            new_p.insert(0, tgt_pPr)
+
+        # 2. Create text run with formatting from original's first run
         run = OxmlElement("w:r")
-        rPr = OxmlElement("w:rPr")
-        run.append(rPr)
+
+        # Copy run formatting (bold, italic, font, size, color) from first run
+        if para.runs:
+            src_rPr = para.runs[0]._r.find(qn("w:rPr"))
+            if src_rPr is not None:
+                import copy
+                tgt_rPr = copy.deepcopy(src_rPr)
+                run.append(tgt_rPr)
+
+        # Add text
         t = OxmlElement("w:t")
         t.set(qn("xml:space"), "preserve")
         t.text = text
         run.append(t)
-        new_para.append(run)
+        new_p.append(run)
 
-        # Insert after the original paragraph
-        para._p.addnext(new_para)
+        # 3. Insert after original paragraph
+        para._p.addnext(new_p)
 
-        # Return a paragraph-like wrapper for potential chaining
-        from docx.text.paragraph import Paragraph
-        return Paragraph(new_para, para._parent)
+        return Paragraph(new_p, para._parent)
 
     @staticmethod
-    def _append_cell_translation(cell, text: str):
-        """Append translation to a table cell with a line break."""
+    def _append_cell_translation(cell, text):
+        """Append translation to a table cell, preserving cell formatting."""
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
 
-        # Add a new paragraph in the cell
         p = OxmlElement("w:p")
         run = OxmlElement("w:r")
         t = OxmlElement("w:t")
@@ -244,12 +302,18 @@ class DocxHandler(BaseHandler):
         cell._tc.append(p)
 
     @staticmethod
-    def _replace_cell_text(cell, text: str):
-        """Replace cell content with translated text."""
-        for para in cell.paragraphs:
+    def _replace_cell_text(cell, text):
+        """Replace cell content, preserving first run's formatting."""
+        if not cell.paragraphs:
+            return
+        first_para = cell.paragraphs[0]
+        if first_para.runs:
+            first_para.runs[0].text = text
+            for run in first_para.runs[1:]:
+                run.text = ""
+        else:
+            first_para.text = text
+        # Clear extra paragraphs
+        for para in cell.paragraphs[1:]:
             for run in para.runs:
                 run.text = ""
-        if cell.paragraphs:
-            cell.paragraphs[0].runs[0].text = text if cell.paragraphs[0].runs else ""
-            if not cell.paragraphs[0].runs:
-                cell.paragraphs[0].text = text

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>User Guide - EPUB Translator</title>
+  <title>使用指南 - EbookTranslator</title>
   <link rel="preconnect" href="https://fonts.loli.net">
   <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -60,7 +60,7 @@
 <div class="container">
 
   <header>
-    <div class="logo">EPUB <span>Translator</span></div>
+    <div class="logo">EbookTranslator</div>
     <div class="lang-toggle">
       <button id="lang-zh" onclick="setLang('zh')">中</button>
       <button id="lang-en" onclick="setLang('en')">EN</button>
@@ -196,7 +196,7 @@
   </div>
 
   <footer>
-    <p>© Copyright 2026 老丁 · EPUB Translator</p>
+    <p>© Copyright 2026 老丁 · EbookTranslator</p>
   </footer>
 </div>
 
@@ -227,15 +227,15 @@ const i18n = {
   en: {
     back: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back',
     pageTitle: 'User Guide',
-    pageSubtitle: 'Learn how to translate your EPUB books from English to Chinese',
+    pageSubtitle: 'Learn how to translate your EBooks and documents into any language',
     step1Num: 'Step 1', step1Title: 'Install Python', step1Desc: 'Download and install Python 3.10 or later. Make sure to check <code>Add to PATH</code> during installation.', step1Note: 'Download: <a href="https://www.python.org/downloads/" target="_blank" style="color:var(--accent)">python.org/downloads</a>',
     step2Num: 'Step 2', step2Title: 'Get Your API Key', step2Desc: 'Visit DeepSeek Platform to create an API Key for the translation service.', step2Note: 'Apply: <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent)">platform.deepseek.com/api_keys</a>',
     step3Num: 'Step 3', step3Title: 'Start the Application', step3Desc: 'Double-click <code>启动.bat</code> (Windows) or run the command below. The browser opens automatically.', step3Note: 'The startup script auto-installs dependencies on first run',
     step4Num: 'Step 4', step4Title: 'Configure API Key', step4Desc: 'On first launch, a settings popup appears automatically. Enter your API Key and click <code>Save</code>. The key is stored encrypted.', step4Note: '',
-    step5Num: 'Step 5', step5Title: 'Open an EPUB File', step5Desc: 'Click <code>Open a New Book</code> or drag and drop an <code>.epub</code> file. Book info (title, author, size) is displayed.', step5Note: '',
+    step5Num: 'Step 5', step5Title: 'Open a File', step5Desc: 'Click <code>Open File</code> or drag and drop an <code>.epub</code> or <code>.docx</code> file. Document info (title, author, size) is displayed.', step5Note: '',
     step6Num: 'Step 6', step6Title: 'Start Translation', step6Desc: 'Click the <code>Start Translation</code> button. The progress bar shows real-time status.', step6Note: '',
-    step7Num: 'Step 7', step7Title: 'Download the Result', step7Desc: 'When translation completes, click <code>Download</code> to save the translated EPUB.', step7Note: '',
-    modesTitle: 'Translation Modes', modesDesc: '<strong>🌐 Bilingual (default):</strong> Keeps original English and adds Chinese below. Great for language learning.<br><br><strong>🇨🇳 Chinese Only:</strong> Replaces English with Chinese. Produces a pure Chinese EPUB.',
+    step7Num: 'Step 7', step7Title: 'Download the Result', step7Desc: 'When translation completes, click <code>Download</code> to save the translated document.', step7Note: '',
+    modesTitle: 'Translation Modes', modesDesc: '<strong>🌐 Bilingual (default):</strong> Keeps original text and adds translation below. Great for language learning.<br><br><strong>🇨🇳 Target Language Only:</strong> Replaces original text with translation.',
     securityTitle: 'Security', securityDesc: '<strong>🔒 Encrypted API Key:</strong> AES-128 encryption before storage.<br><strong>🗑️ Auto Cleanup:</strong> Uploaded files deleted after translation.<br><strong>🏠 Local Processing:</strong> All data processed locally.',
     faqTitle: 'FAQ',
     faq1Q: 'What API does this tool use?', faq1A: 'By default DeepSeek API. You can switch to any OpenAI-compatible API by changing the Base URL and Model in settings.',
@@ -254,7 +254,7 @@ function setLang(l) {
   document.getElementById('lang-zh').classList.toggle('active', l === 'zh');
   document.getElementById('lang-en').classList.toggle('active', l === 'en');
   document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
-  document.title = l === 'zh' ? '使用指南 - EPUB Translator' : 'User Guide - EPUB Translator';
+  document.title = l === 'zh' ? '使用指南 - EbookTranslator' : 'User Guide - Document Translator';
   applyLang();
 }
 
