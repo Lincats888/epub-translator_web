@@ -365,29 +365,42 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
                     error=f"Source language ({source_lang}) matches target ({target_lang}). Nothing to translate.")
             return
 
-        # Translate batch by batch for smooth progress
+        # Translate concurrently for speed
         total = len(fragments)
         translator_obj = Translator(config)
-        batch_size = config.batch_size
 
         _update(task_id, status="translating", step="Translating...",
                 current_file=0, total_files=1,
                 file_name=os.path.basename(file_path),
                 file_progress=0, file_total=total)
 
-        all_translations = []
+        texts = [f.text for f in fragments]
+        progress_state = {"count": 0}
 
-        for i in range(0, total, batch_size):
-            if _tasks.get(task_id, {}).get("stopped"):
-                _update(task_id, status="stopped", step="Stopped by user")
-                return
+        def on_progress(done):
+            progress_state["count"] = min(done, total)
+            _update(task_id, file_progress=progress_state["count"], file_total=total)
 
-            batch = [f.text for f in fragments[i:i + batch_size]]
-            result = translator_obj.translate_batch(batch)
-            all_translations.extend(result)
+        all_translations = translator_obj.translate_all(
+            texts, progress_callback=on_progress)
 
-            done_count = min(i + batch_size, total)
-            _update(task_id, file_progress=done_count, file_total=total)
+        # Retry English-only lines concurrently
+        import re
+        en_idx = [fi for fi in range(len(all_translations))
+                  if not re.search(r'[一-鿿]', str(all_translations[fi]))]
+        if en_idx:
+            en_texts = [fragments[fi].text for fi in en_idx]
+            try:
+                retrans = translator_obj.translate_all(en_texts)
+                retried = 0
+                for fi, trans in zip(en_idx, retrans):
+                    if re.search(r'[一-鿿]', str(trans)):
+                        all_translations[fi] = trans
+                        retried += 1
+                if retried:
+                    _update(task_id, file_progress=total)
+            except Exception:
+                pass
 
         _update(task_id, step="Rebuilding document...")
         output_path = handler.rebuild(

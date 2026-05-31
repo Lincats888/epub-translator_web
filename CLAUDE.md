@@ -82,27 +82,35 @@ class BaseHandler(ABC):
 ## PDF 翻译细节
 
 ### 文字提取
-- 使用 PyMuPDF (fitz)，逐页处理，不一次性全部加载
-- 每个 PyMuPDF 文字块（block）作为独立片段，不跨块合并
+- 使用 PyMuPDF (fitz)，逐页逐行提取，每行独立记录位置（bbox）、字号、颜色
 - 检测扫描版 PDF（>70% 页面无文字）→ 直接报错
+- **标题合并**：≥18pt 的大字号行，仅按字号+Y距合并（不限 X 坐标）
+- **续行合并**：<18pt 的行，同字号+同X+短文长度 < 前句 70% 则合并
+- 跳过中间行合并：如标题行之间夹了不同字号行，自动跳过
 
 ### 代码检测
-- 与 DOCX 共用代码检测逻辑（Python/Java/C++/SQL/Pascal 等）
-- 单行代码也可识别
+- 多行文本：>30% 行匹配代码模式 → 跳过翻译
+- **不再检测单行**（避免 "Uses"、"For"、"From"、"Create" 等常见英文被误拦）
+- 与 DOCX 共用代码模式（Python/Java/C++/SQL/Pascal）
 
 ### 中文渲染
-- 使用系统 CJK 字体（SimHei 黑体优先，微软雅黑备选）
-- 字体通过 `page.insert_font()` 嵌入 PDF
+- 使用系统 CJK 字体（SimSun 宋体优先，SimHei 黑体备选）
+- 字体通过 `page.insert_font()` 嵌入，按 `(doc_id, page_num)` 缓存
+- **字体在红改（redact）之后嵌入**，避免被清掉
 - `insert_pdf()` 批量合并时自动去重，控制文件大小
 
 ### 双语模式
 - 输出为交替页面：Page 0=英文，Page 1=中文，Page 2=英文...
-- 使用 `insert_pdf()` 批量插入 + `move_page()` 重排实现
-- 页面级按比例缩放字号，所有内容自适应页面空间
+- 全量翻译后在单独副本上修改，再 `insert_pdf()` + `move_page()` 重排
 
 ### 排版
-- `_rebuild_replace()`：按页面整体计算所需行数，均匀缩放字号
+- **逐行 1:1 回写**：每行翻译写回原始位置，不缩字、不流式重排
 - `_wrap_text()`：混合中英文智能换行（含空格按词换行，无空格按字符换行）
+- **英文重翻**：翻译后逐行检测，无 CJK 字符的行通过 `translate_all` 并发重翻
+
+### 已知问题
+- CJK 字体嵌入导致文件增大 4-7x（SimSun.ttc 约 10MB）
+- PyMuPDF `get_text()` 无法解码嵌入字体写入的 CJK 文本（PDF 阅读器正常）
 
 ## API Key 加密
 
