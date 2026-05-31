@@ -248,3 +248,60 @@ pytest tests/ --cov=epub_translator  # 含覆盖率
 - [x] 需要断点续传（通过缓存机制实现，中断后重新运行自动跳过已翻译内容）
 - [x] 需要进度条显示（使用 tqdm 库）
 - [ ] 是否需要支持多个 EPUB 文件批量翻译？
+
+## 十一、变更日志 (2026-06-01)
+
+### 11.1 翻译速度优化
+
+**文件**: `epub_translator/translator.py`, `main.py`, `epub_translator/config.py`, `config.yaml`
+
+| 改动 | 说明 |
+|------|------|
+| 新增 `translator.translate_all()` | 用 `ThreadPoolExecutor` 并发发送多批 API 请求，替代逐批串行 |
+| 新增 `config.max_concurrency` | 并发线程数，默认 5 |
+| 新增 `config.api_timeout` | API 超时秒数，默认 120 |
+| `config.batch_size` 默认值改为 20 | 每次 API 调用翻译 20 个段落（原来 5） |
+
+### 11.2 EPUB 非双语模式的块级提取修复
+
+**文件**: `epub_translator/parser.py`
+
+**问题**: `chinese_only` 模式逐 NavigableString 提取，段落中被 `<strong>/<em>/<a>` 打断的文本各自独立翻译，上下文丢失导致"各行"等不连贯译文。
+
+**修复**: 非双语模式也改为**块级提取**（与双语模式相同）。每个 `<p>/<h1>/<li>` 的完整 HTML（含内联标签）作为单个翻译单元发送给 DeepSeek。写回时 `elem.clear()` + `_append_html()` 替换块内容，并设置 `data-epub-translator="1"` 标记防止重翻。
+
+### 11.3 PDF 代码检测修复
+
+**文件**: `handlers/pdf_handler.py` — `_is_code_like()` 和 `_CODE_PATTERNS`
+
+**问题**: 单行文本匹配到 "from"、"for"、"if"、"while"、"uses"、"begin" 等模式时被误判为代码跳过翻译。
+
+**修复**:
+- **移除单行检测**: 只有 3 行以上的多行文本才进入代码判定
+- **收紧正则模式**: 删除 `from `、`for `、`if `、`while `、`begin\b`、`end\.\b`、`<[^>]+>` 等易匹配英文散文的模式
+- 多行阈值保持 >30% 行匹配 → 视为代码
+
+### 11.4 PDF CJK 字体改为宋体
+
+**文件**: `handlers/pdf_handler.py` — `_get_cjk_font_data()`
+
+**修改**: 字体候选列表优先级调整
+
+```
+修改前: SimHei (黑体) → msyh (微软雅黑) → SimSun (宋体)
+修改后: SimSun (宋体) → SimHei (黑体/fallback) → msyh (微软雅黑/fallback)
+```
+
+### 11.5 PDF 字体大小保持接近原文
+
+**文件**: `handlers/pdf_handler.py` — `_replace_text_scaled()`, `_rebuild_replace()`
+
+**问题**: CJK 文字自动缩小到原文的 88%，最小字号低至 6pt，导致中文明显小于英文。
+
+**修复**:
+- 去掉 `orig_size * 0.88` 的 CJK 缩放系数，中文用原文同号字体
+- 最小字号从 `6` 改为 `max(orig_size * 0.7, 8)`，不低于原字号的 70% 且不低于 8pt
+
+---
+
+> **新电脑设置备忘**: 另一台电脑需安装依赖 `pip install -r requirements.txt`，并在 `config.yaml` 中配置 DeepSeek API Key。Windows 系统确保 `C:/Windows/Fonts/simsun.ttc` 或 `simsun.ttf` 存在。

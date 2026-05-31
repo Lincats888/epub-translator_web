@@ -25,15 +25,16 @@ def _get_fitz():
 
 
 # ── Code detection ──────────────────────────────────────────────────
+# Only flag multi-line blocks as code. Single lines are never treated as
+# code because common English words like "from", "for", "if", "while",
+# "uses", "create" etc. appear frequently in normal prose.
 _CODE_PATTERNS = (
-    re.compile(r'^\s*[{}\[\];]'),
-    re.compile(r'^\s*(import |from |def |class |if |for |while )'),
-    re.compile(r'^\s*(public |private |void |int |string |procedure |function )'),
-    re.compile(r'^\s*(#include|using namespace)'),
-    re.compile(r'^\s*<[^>]+>'),
-    re.compile(r'^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE)\s', re.I),
-    re.compile(r'^\s*(\{\$|program |uses |begin\b|end\.\b|const |var |type )', re.I),  # Pascal/Delphi
-    re.compile(r'^\s*(<\?php |<\?xml |<!doctype )', re.I),
+    re.compile(r'^\s*(import |def |class )'),            # Python
+    re.compile(r'^\s*(public |private |void |int |string )'),  # Java/C++
+    re.compile(r'^\s*(#include|using namespace)'),       # C++
+    re.compile(r'^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE)\s', re.I),  # SQL
+    re.compile(r'^\s*(\{\$|program |procedure |function )', re.I),  # Pascal/Delphi
+    re.compile(r'^\s*(<\?php |<\?xml |<!doctype )', re.I),  # PHP/HTML
 )
 
 
@@ -41,14 +42,13 @@ def _is_code_like(text):
     if not text or len(text.strip()) < 3:
         return False
     lines = text.strip().split('\n')
+    # Only check multi-line blocks (3+ lines)
+    if len(lines) <= 2:
+        return False
     code_lines = sum(1 for l in lines if any(p.search(l) for p in _CODE_PATTERNS))
-    if len(lines) >= 1:
-        # Single line: must match a pattern
-        if code_lines >= 1 and len(lines) == 1:
-            return True
-        # Multi-line: >40% of lines look like code
-        if len(lines) > 2 and code_lines / len(lines) > 0.3:
-            return True
+    # >30% of lines match code patterns → treat as code
+    if code_lines / len(lines) > 0.3:
+        return True
     return False
 
 
@@ -241,9 +241,7 @@ class PdfHandler(BaseHandler):
             for bi in block_info:
                 bbox = list(bi["orig_bbox"])
                 bbox[1] = current_y
-                font_size = max(bi["orig_size"] * scale, 6)
-                if bi["is_cjk"]:
-                    font_size *= 0.88
+                font_size = max(bi["orig_size"] * scale, max(bi["orig_size"] * 0.7, 8))
 
                 char_w = font_size if bi["is_cjk"] else font_size * 0.55
                 max_ch = max(int(avail_width / char_w), 8)
@@ -438,10 +436,10 @@ class PdfHandler(BaseHandler):
         if avail_height <= 0:
             return None
 
-        # Find font size that fits
-        base_size = orig_size * 0.88 if is_cjk else orig_size
+        # Find font size that fits — keep close to original size
+        base_size = orig_size
         font_size = base_size
-        min_font = 6
+        min_font = max(orig_size * 0.7, 8)
 
         while font_size >= min_font:
             char_width = font_size if is_cjk else font_size * 0.55
@@ -538,9 +536,11 @@ class PdfHandler(BaseHandler):
         if cls._cjk_font_data:
             return cls._cjk_font_data
         candidates = [
-            "C:/Windows/Fonts/simhei.ttf",
-            "C:/Windows/Fonts/msyh.ttc",
-            "C:/Windows/Fonts/simsun.ttc",
+            "C:/Windows/Fonts/simsun.ttc",          # 宋体 (preferred)
+            "C:/Windows/Fonts/simsun.ttf",
+            "C:/Windows/Fonts/simhei.ttf",          # 黑体 (fallback)
+            "C:/Windows/Fonts/msyh.ttc",            # 微软雅黑 (fallback)
+            "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
             "/System/Library/Fonts/PingFang.ttc",
         ]

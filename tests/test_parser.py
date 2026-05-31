@@ -77,7 +77,9 @@ class TestParser:
         texts = [f.text for f in parsed.fragments]
         assert "Hello World" in texts
         assert "This is a paragraph." in texts
-        assert "bold" in texts
+        # "bold" is inside <strong> within a <p> block; block-level extraction
+        # captures the full paragraph, not individual NavStrings
+        assert any("<strong>bold</strong>" in t for t in texts)
 
     def test_parse_html_skips_script_and_style(self, html_file):
         skip_tags = ["script", "style", "code", "pre"]

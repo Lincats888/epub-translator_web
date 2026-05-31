@@ -74,12 +74,20 @@ class ParsedFile:
                     _append_html(cloned, translation, self.soup)
                     elem.insert_after(cloned)
         else:
+            # Non-bilingual (chinese_only): replace block element's inner content
+            # with the translated HTML (inline tags preserved).
             for fragment, translation in zip(self.fragments, translations):
                 if fragment.is_code:
                     fragment.element.clear()
                     fragment.element.string = translation
                     fragment.element["lang"] = "zh-CN"
+                elif isinstance(fragment.element, Tag):
+                    elem = fragment.element
+                    elem.clear()
+                    _append_html(elem, translation, self.soup)
+                    elem[TRANSLATION_MARKER] = "1"
                 else:
+                    # NavigableString (NCX/OPF files in non-bilingual mode)
                     fragment.element.replace_with(translation)
         return str(self.soup)
 
@@ -262,68 +270,62 @@ def parse_html_file(
                 text=text, element=code_tag, is_code=True,
             ))
 
-    if bilingual:
-        # First pass: mark all table cells so they are processed individually
-        # (not as a joined table fragment) and skipped on re-parse.
-        for table in soup.find_all("table"):
-            if not table.get(TRANSLATION_MARKER):
-                for cell in table.find_all(["td", "th"]):
-                    if not cell.get(TRANSLATION_MARKER):
-                        cell[TRANSLATION_MARKER] = "1"
+    # Block-level extraction — extract entire block elements (p, h1-h6, li, etc.)
+    # instead of individual NavigableStrings. This preserves sentence context
+    # and prevents disconnected translations when inline tags split a sentence.
+    #
+    # Table cells are also extracted individually so their translations
+    # stay independent (keeps table integrity).
 
-        for elem in soup.find_all():
-            if not hasattr(elem, "name") or elem.name not in BLOCK_TAGS:
-                continue
-            if elem.get(TRANSLATION_MARKER):
-                continue
-            if _should_skip_tag(elem, skip_tags):
-                continue
-            # Skip code blocks and anything inside code blocks
-            if elem.name in CODE_TAGS or _within_tags(elem, CODE_TAGS):
-                continue
-            # Skip if inside a table (cells are already marked above)
-            if _within_tags(elem, {"table"}):
-                continue
-            # Skip if any ancestor has the translation marker
-            # (cloned blocks from previous translations may contain child elements)
-            if _has_ancestor_with_marker(elem):
-                continue
+    # Mark all table cells so they can be skipped on re-parse.
+    for table in soup.find_all("table"):
+        if not table.get(TRANSLATION_MARKER):
+            for cell in table.find_all(["td", "th"]):
+                if not cell.get(TRANSLATION_MARKER):
+                    cell[TRANSLATION_MARKER] = "1"
 
-            if not _is_leaf_block(elem):
-                continue
-            # Skip elements that contain inline code tags (<code>, <pre>)
-            if _contains_code(elem):
-                continue
-            # Use decode_contents() to preserve inline tags (<strong>, <a>, etc.)
-            text = elem.decode_contents().strip()
-            if _is_translatable(text):
-                result.fragments.append(TextFragment(text=text, element=elem))
+    block_elements = []
 
-        # Second pass: extract table cells as individual fragments
-        for cell in soup.find_all(["td", "th"]):
-            if _should_skip_tag(cell, skip_tags):
-                continue
-            if _contains_code(cell):
-                continue
-            if not _is_leaf_block(cell):
-                continue
-            text = cell.decode_contents().strip()
-            if _is_translatable(text):
-                result.fragments.append(TextFragment(text=text, element=cell))
-    else:
-        for nav_string in soup.find_all(string=True):
-            if isinstance(nav_string, NavigableString):
-                parent = nav_string.parent
-                if (
-                    parent
-                    and hasattr(parent, "name")
-                    and _should_skip_tag(parent, skip_tags)
-                ):
-                    continue
-                if _is_translatable(str(nav_string)):
-                    result.fragments.append(
-                        TextFragment(text=str(nav_string), element=nav_string)
-                    )
+    for elem in soup.find_all():
+        if not hasattr(elem, "name") or elem.name not in BLOCK_TAGS:
+            continue
+        if elem.get(TRANSLATION_MARKER):
+            continue
+        if _should_skip_tag(elem, skip_tags):
+            continue
+        # Skip code blocks and anything inside code blocks
+        if elem.name in CODE_TAGS or _within_tags(elem, CODE_TAGS):
+            continue
+        # Skip if inside a table (cells are extracted separately below)
+        if _within_tags(elem, {"table"}):
+            continue
+        # Skip if any ancestor has the translation marker
+        if _has_ancestor_with_marker(elem):
+            continue
+
+        if not _is_leaf_block(elem):
+            continue
+        # Skip elements that contain inline code tags (<code>, <pre>)
+        if _contains_code(elem):
+            continue
+        block_elements.append(elem)
+
+    for elem in block_elements:
+        text = elem.decode_contents().strip()
+        if _is_translatable(text):
+            result.fragments.append(TextFragment(text=text, element=elem))
+
+    # Table cells: extract as individual fragments
+    for cell in soup.find_all(["td", "th"]):
+        if _should_skip_tag(cell, skip_tags):
+            continue
+        if _contains_code(cell):
+            continue
+        if not _is_leaf_block(cell):
+            continue
+        text = cell.decode_contents().strip()
+        if _is_translatable(text):
+            result.fragments.append(TextFragment(text=text, element=cell))
 
     return result
 
