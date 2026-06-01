@@ -39,7 +39,20 @@ from epub_translator.rebuilder import inject_line_height, rebuild_epub
 from epub_translator.crypto import encrypt, decrypt, is_encrypted
 
 from handlers import get_handler, get_supported_extensions, is_supported
+from handlers.pdf_handler import PdfHandler
 from languages import get_all_languages, get_lang_name, detect_language, get_system_prompt
+
+
+def _doc_page_count(path):
+    """Helper: count pages in a PDF."""
+    try:
+        import fitz
+        doc = fitz.open(path)
+        n = len(doc)
+        doc.close()
+        return n
+    except Exception:
+        return 40  # fallback
 
 # ── App & State ────────────────────────────────────────────────────────
 app = FastAPI(title="EPUB Translator")
@@ -334,23 +347,69 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
     """Background translation for DOCX/PDF using handlers."""
     try:
         # ── pdf2zh fast path: delegates entirely to PDFMathTranslate ──
-        if pdf_method == "pdf2zh":
+        if pdf_method == "pdf2zh" and PdfHandler.is_pdf2zh_available():
             _update(task_id, status="translating", step="Translating with PDFMathTranslate...",
                     current_file=0, total_files=1,
                     file_name=os.path.basename(file_path),
-                    file_progress=0, file_total=1)
+                    file_progress=0, file_total=40)
             try:
-                from handlers.pdf_handler import PdfHandler
-                output_path = PdfHandler.rebuild_via_pdf2zh(
-                    file_path, output_dir=os.path.dirname(file_path))
+                # Run pdf2zh in background thread with heartbeat progress
+                import threading
+                result_holder = [None]
+                error_holder = [None]
+                done_flag = threading.Event()
+                heartbeat_stop = threading.Event()
+
+                def _run_pdf2zh():
+                    try:
+                        result_holder[0] = PdfHandler.rebuild_via_pdf2zh(
+                            file_path, output_dir=os.path.dirname(file_path))
+                    except Exception as e:
+                        error_holder[0] = e
+                    done_flag.set()
+
+                def _heartbeat():
+                    elapsed = 0
+                    while not heartbeat_stop.is_set():
+                        heartbeat_stop.wait(1.5)
+                        elapsed += 1.5
+                        # Simulated progress: estimate ~3s per page, cap at 95%
+                        pages = _doc_page_count(file_path)
+                        est_total = max(pages * 3, 10)
+                        pct = min(int(elapsed / est_total * 100), 95)
+                        _update(task_id, file_progress=pct, file_total=100,
+                                step=f"PDFMathTranslate: {min(pct, 95)}%...")
+
+                t_work = threading.Thread(target=_run_pdf2zh)
+                t_beat = threading.Thread(target=_heartbeat)
+                t_work.start()
+                t_beat.start()
+                done_flag.wait()
+                heartbeat_stop.set()
+                t_beat.join()
+                t_work.join()
+
+                if error_holder[0]:
+                    _update(task_id, status="error",
+                            error=f"PDFMathTranslate failed: {error_holder[0]}")
+                    return
+
+                output_path = result_holder[0]
             except Exception as e:
                 _update(task_id, status="error", error=f"PDFMathTranslate failed: {e}")
                 return
-            _update(task_id, file_progress=1, file_total=1)
-            output_filename = os.path.basename(output_path)
-            _update(task_id, status="done", translated=1, cached=0,
-                    output_path=output_path, output_filename=output_filename,
-                    step="Done!")
+
+            # Move output to output/ alongside other translated files
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+            final_name = os.path.basename(output_path)
+            final_path = os.path.join(OUTPUT_DIR, final_name)
+            shutil.move(output_path, final_path)
+            output_path = final_path
+
+            _update(task_id, file_progress=100, file_total=100)
+            _update(task_id, status="done",
+                    translated=_doc_page_count(output_path) // 2, cached=0,
+                    output=output_path, step="Done!")
             return
 
         _update(task_id, status="loading", step="Loading configuration...")
@@ -519,6 +578,7 @@ async def start_translation(task_id: str, body: dict = None):
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
         pdf_method = body.get("pdf_method", "pdf2zh")
+    print(f"[DEBUG] pdf_method={pdf_method} file_type={task.get('file_type')} bilingual={bilingual}")
 
     _update(task_id, status="queued", step="Starting...", stopped=False,
             target_lang=target_lang, bilingual=bilingual)

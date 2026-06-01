@@ -10,6 +10,7 @@ Rebuild preserves font, size, color, and position.
 import os
 import re
 import shutil
+import time
 
 from .base import BaseHandler, TextFragment
 
@@ -324,22 +325,41 @@ class PdfHandler(BaseHandler):
                 "Install with: pip install uv && uv tool install --python 3.12 pdf2zh"
             )
 
+        import glob as _glob
+
         cmd = [exe, file_path, "-s", service]
         result = subprocess.run(cmd, capture_output=True, text=True)
 
-        # pdf2zh writes OUTPUT-dual.pdf and OUTPUT-mono.pdf alongside input
-        base = os.path.splitext(file_path)[0]
-        dual = f"{base}-dual.pdf"
+        # pdf2zh writes {stem}-dual.pdf alongside its current working
+        # directory (typically the project root), NOT alongside the input
+        # file.  Search both locations.
+        base_stem = os.path.splitext(os.path.basename(file_path))[0]
+        search_dirs = [
+            os.getcwd(),                          # project root (CWD)
+            os.path.dirname(file_path) or ".",    # input file directory
+        ]
+        dual = None
+        for search in search_dirs:
+            candidate = os.path.join(search, f"{base_stem}-dual.pdf")
+            if os.path.exists(candidate):
+                dual = candidate
+                break
+            # Glob fallback for slightly different filenames
+            candidates = _glob.glob(os.path.join(search, "*-dual.pdf"))
+            if candidates:
+                dual = max(candidates, key=os.path.getmtime)
+                break
+            time.sleep(0.5)
 
-        if not os.path.exists(dual):
+        if not dual or not os.path.exists(dual):
             raise RuntimeError(
-                f"pdf2zh failed:\n{result.stdout}\n{result.stderr}"
+                f"pdf2zh output not found. Searched: {search_dirs}\n"
+                f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
             )
 
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
-            dest = os.path.join(output_dir,
-                                os.path.basename(base) + "_dual.pdf")
+            dest = os.path.join(output_dir, f"{base_stem}_dual.pdf")
             shutil.move(dual, dest)
             return dest
         return dual
@@ -930,9 +950,12 @@ class PdfHandler(BaseHandler):
         if cls._cjk_font_data:
             return cls._cjk_font_data
         candidates = [
+            # Same font as PDFMathTranslate (思源宋体)
+            os.path.expanduser("~/.cache/babeldoc/fonts/SourceHanSerifCN-Regular.ttf"),
             "C:/Windows/Fonts/simhei.ttf",
             "C:/Windows/Fonts/msyh.ttc",
             "C:/Windows/Fonts/simsun.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
             "/System/Library/Fonts/PingFang.ttc",
         ]
