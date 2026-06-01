@@ -756,17 +756,39 @@ class PdfHandler(BaseHandler):
                 pass
 
         color_rgb = cls._int_to_rgb(color)
-        tw = fitz.TextWriter(page_rect=page.rect, color=color_rgb)
 
-        tw.fill_textbox(
-            rect,
-            text,
-            font=font_obj,
-            fontsize=font_size,
-            lineheight=1.35,
-            align=fitz.TEXT_ALIGN_LEFT,
-        )
-        page.write_text(writers=tw)
+        # Try to write; if rect is too small for the font, shrink until it fits.
+        for attempt in range(4):
+            try:
+                tw = fitz.TextWriter(page_rect=page.rect, color=color_rgb)
+                tw.fill_textbox(
+                    rect,
+                    text,
+                    font=font_obj,
+                    fontsize=font_size,
+                    lineheight=1.35,
+                    align=fitz.TEXT_ALIGN_LEFT,
+                )
+                page.write_text(writers=tw)
+                break
+            except Exception:
+                font_size *= 0.7
+                if attempt >= 2:
+                    # Last resort: write at minimum size (2pt)
+                    try:
+                        tw2 = fitz.TextWriter(page_rect=page.rect, color=color_rgb)
+                        tw2.fill_textbox(
+                            rect,
+                            text,
+                            font=font_obj,
+                            fontsize=2,
+                            lineheight=1.0,
+                            align=fitz.TEXT_ALIGN_LEFT,
+                        )
+                        page.write_text(writers=tw2)
+                    except Exception:
+                        pass
+                    break
 
     @classmethod
     def _write_rotated_block(cls, page, frag, text, font_obj, font_size, color):
