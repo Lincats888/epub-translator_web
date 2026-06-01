@@ -330,9 +330,29 @@ def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN"):
 
 
 def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-CN",
-                           bilingual: bool = True):
+                           bilingual: bool = True, pdf_method: str = "pdf2zh"):
     """Background translation for DOCX/PDF using handlers."""
     try:
+        # ── pdf2zh fast path: delegates entirely to PDFMathTranslate ──
+        if pdf_method == "pdf2zh":
+            _update(task_id, status="translating", step="Translating with PDFMathTranslate...",
+                    current_file=0, total_files=1,
+                    file_name=os.path.basename(file_path),
+                    file_progress=0, file_total=1)
+            try:
+                from handlers.pdf_handler import PdfHandler
+                output_path = PdfHandler.rebuild_via_pdf2zh(
+                    file_path, output_dir=os.path.dirname(file_path))
+            except Exception as e:
+                _update(task_id, status="error", error=f"PDFMathTranslate failed: {e}")
+                return
+            _update(task_id, file_progress=1, file_total=1)
+            output_filename = os.path.basename(output_path)
+            _update(task_id, status="done", translated=1, cached=0,
+                    output_path=output_path, output_filename=output_filename,
+                    step="Done!")
+            return
+
         _update(task_id, status="loading", step="Loading configuration...")
         config = Config(CONFIG_PATH)
         config.load()
@@ -405,7 +425,8 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
         _update(task_id, step="Rebuilding document...")
         output_path = handler.rebuild(
             file_path, fragments, all_translations,
-            bilingual=bilingual, target_lang=target_lang
+            bilingual=bilingual, target_lang=target_lang,
+            method=pdf_method
         )
 
         _update(task_id, status="done", step="Complete!",
@@ -493,9 +514,11 @@ async def start_translation(task_id: str, body: dict = None):
     # Get target language and mode from request body
     target_lang = "zh-CN"
     bilingual = True
+    pdf_method = "pdf2zh"
     if body:
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
+        pdf_method = body.get("pdf_method", "pdf2zh")
 
     _update(task_id, status="queued", step="Starting...", stopped=False,
             target_lang=target_lang, bilingual=bilingual)
@@ -505,7 +528,7 @@ async def start_translation(task_id: str, body: dict = None):
         _executor.submit(_run_translate, task_id, file_path, target_lang)
     else:
         _executor.submit(_run_translate_generic, task_id, file_path,
-                         target_lang, bilingual)
+                         target_lang, bilingual, pdf_method)
 
     return {"ok": True}
 

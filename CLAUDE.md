@@ -81,36 +81,42 @@ class BaseHandler(ABC):
 
 ## PDF 翻译细节
 
-### 文字提取
-- 使用 PyMuPDF (fitz)，逐页逐行提取，每行独立记录位置（bbox）、字号、颜色
-- 检测扫描版 PDF（>70% 页面无文字）→ 直接报错
-- **标题合并**：≥18pt 的大字号行，仅按字号+Y距合并（不限 X 坐标）
-- **续行合并**：<18pt 的行，同字号+同X+短文长度 < 前句 70% 则合并
-- 跳过中间行合并：如标题行之间夹了不同字号行，自动跳过
+PDF 翻译提供**双引擎**，用户可在 Web 界面下拉框中选择：
 
-### 代码检测
-- 多行文本：>30% 行匹配代码模式 → 跳过翻译
-- **不再检测单行**（避免 "Uses"、"For"、"From"、"Create" 等常见英文被误拦）
-- 与 DOCX 共用代码模式（Python/Java/C++/SQL/Pascal）
+### 引擎 1: PDFMathTranslate（推荐，默认）
+- 集成开源项目 [PDFMathTranslate](https://github.com/Byaidu/PDFMathTranslate)
+- 使用 pdfminer.six 解析 PDF 内容流 → 翻译 → 重建，排版效果好
+- 通过 `PdfHandler.rebuild_via_pdf2zh()` 调用，自动查找系统中的 pdf2zh 二进制
+- 详见 `handlers/PDFMathTranslate.md`
+- **安装**：`uv tool install --python 3.12 pdf2zh`（需要 Python 3.10-3.12）
+- **配置**：独立的 `~/.config/PDFMathTranslate/config.json`，不读 `config.yaml`
+
+### 引擎 2: 原生 PyMuPDF（备选）
+- 提取 → 翻译 → exact bbox 回写（宽高不变，字号自适应收缩）
+- 代码检测：仅多行（3+ 行）且 >30% 匹配才跳过，单行不判代码
+- 同块异色/异位 span 自动拆分（颜色不同或 x 间距 >80px）
+- ALL-CAPS 短词（≥2 字符）不会被过滤
+
+### 文字提取
+- 使用 PyMuPDF (fitz)，逐页逐行提取，每行独立记录位置（bbox）、字号、颜色、行方向（旋转）
+- 检测扫描版 PDF（>70% 页面无文字）→ 直接报错
+- 同块 span 拆分：颜色不同 → 独立片段；x 间距 >80px → 独立片段（如 `[标题]______[CHAPTER 3]`）
 
 ### 中文渲染
-- 使用系统 CJK 字体（SimSun 宋体优先，SimHei 黑体备选）
-- 字体通过 `page.insert_font()` 嵌入，按 `(doc_id, page_num)` 缓存
-- **字体在红改（redact）之后嵌入**，避免被清掉
-- `insert_pdf()` 批量合并时自动去重，控制文件大小
+- CJK 字体：SimSun 宋体优先，SimHei 黑体备选
+- 颜色保留：`TextWriter(color=color_rgb)` 逐块设置
+- 粗体/斜体：`_map_font()` 映射到 `hebo`/`heit`/`hebi`
+- 旋转文字：`insert_textbox(morph=(point, matrix))` 保留原始倾角（15° 等任意角度）
+- 字号：`_optimal_font_size()` 二分查找最大能装下的字号，最小不低于原字号的 70%
 
 ### 双语模式
 - 输出为交替页面：Page 0=英文，Page 1=中文，Page 2=英文...
 - 全量翻译后在单独副本上修改，再 `insert_pdf()` + `move_page()` 重排
 
 ### 排版
-- **逐行 1:1 回写**：每行翻译写回原始位置，不缩字、不流式重排
-- `_wrap_text()`：混合中英文智能换行（含空格按词换行，无空格按字符换行）
-- **英文重翻**：翻译后逐行检测，无 CJK 字符的行通过 `translate_all` 并发重翻
-
-### 已知问题
-- CJK 字体嵌入导致文件增大 4-7x（SimSun.ttc 约 10MB）
-- PyMuPDF `get_text()` 无法解码嵌入字体写入的 CJK 文本（PDF 阅读器正常）
+- **exact bbox 策略**：每个文字块用原文精确矩形写回，宽高不变，字体缩到能装下
+- 核心理念：接受缩字，换布局零偏移
+- 不再使用流式排版或列感知排版（已回退，效果不佳）
 
 ## API Key 加密
 
@@ -185,7 +191,7 @@ Web 界面也可通过设置弹窗修改配置（齿轮图标 → `POST /api/con
 | `/` | GET | 前端页面 |
 | `/guide` | GET | 使用指南页面 |
 | `/api/upload` | POST | 上传文件（.epub/.docx/.pdf），返回元数据 |
-| `/api/start/{id}` | POST | 开始翻译（body: target_lang, bilingual） |
+| `/api/start/{id}` | POST | 开始翻译（body: target_lang, bilingual, pdf_method） |
 | `/api/stop/{id}` | POST | 停止翻译 |
 | `/api/progress/{id}` | GET | SSE 流，实时推送翻译进度 |
 | `/api/download/{id}` | GET | 下载翻译完成的文件 |
@@ -203,9 +209,15 @@ Web 界面也可通过设置弹窗修改配置（齿轮图标 → `POST /api/con
 | `output/` | 翻译完成的 EPUB 输出（`*_zh.epub`） |
 | `tests/fixtures/sample.epub` | 最小测试 EPUB（含段落、表格、代码、图片） |
 
+## 跨平台部署
+
+- **Windows**: 双击 `启动.bat`，自动安装依赖 + PDFMathTranslate + 启动服务
+- **Linux/Mac**: `chmod +x 启动.sh && ./启动.sh`
+
 ## 依赖
 
 - Python 3.10+
 - 核心：beautifulsoup4, lxml, openai, pyyaml, tqdm, cryptography, langdetect
 - Web 服务：fastapi, uvicorn, python-multipart
 - 格式处理：python-docx, PyMuPDF
+- PDF 增强（可选）：pdf2zh (PDFMathTranslate, 需 Python 3.10-3.12)

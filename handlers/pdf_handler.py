@@ -286,14 +286,83 @@ class PdfHandler(BaseHandler):
         doc.close()
         return fragments
 
+    # ── pdf2zh integration ────────────────────────────────────────────
+
+    @staticmethod
+    def _find_pdf2zh():
+        """Find the pdf2zh binary. Cross-platform."""
+        import shutil
+        # 1. Check PATH (pip install)
+        for name in ("pdf2zh", "pdf2zh.exe"):
+            found = shutil.which(name)
+            if found:
+                return found
+        # 2. Check uv install location
+        home = os.path.expanduser("~")
+        for sub in (".local/bin/pdf2zh", ".local/bin/pdf2zh.exe",
+                     ".cargo/bin/pdf2zh", ".cargo/bin/pdf2zh.exe"):
+            path = os.path.join(home, sub)
+            if os.path.exists(path):
+                return path
+        return None
+
+    @classmethod
+    def rebuild_via_pdf2zh(cls, file_path, output_dir=None, service="deepseek"):
+        """Use PDFMathTranslate to translate and rebuild the PDF.
+
+        This bypasses our custom extract/translate/rebuild pipeline and
+        delegates to pdf2zh's content-stream-level reconstruction, which
+        preserves layout significantly better than our bbox-based approach.
+        """
+        import subprocess
+        import shutil
+
+        exe = cls._find_pdf2zh()
+        if not exe:
+            raise FileNotFoundError(
+                "pdf2zh not found. "
+                "Install with: pip install uv && uv tool install --python 3.12 pdf2zh"
+            )
+
+        cmd = [exe, file_path, "-s", service]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        # pdf2zh writes OUTPUT-dual.pdf and OUTPUT-mono.pdf alongside input
+        base = os.path.splitext(file_path)[0]
+        dual = f"{base}-dual.pdf"
+
+        if not os.path.exists(dual):
+            raise RuntimeError(
+                f"pdf2zh failed:\n{result.stdout}\n{result.stderr}"
+            )
+
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            dest = os.path.join(output_dir,
+                                os.path.basename(base) + "_dual.pdf")
+            shutil.move(dual, dest)
+            return dest
+        return dual
+
+    @staticmethod
+    def is_pdf2zh_available():
+        return PdfHandler._find_pdf2zh() is not None
+
     def rebuild(self, file_path, fragments, translations, bilingual,
-                target_lang="zh-CN"):
+                target_lang="zh-CN", method="native"):
         """Write translations back to the PDF.
+
+        method='native': use our PyMuPDF bbox-based rebuild (exact bbox,
+            font shrinks to fit).
+        method='pdf2zh': delegate to PDFMathTranslate for content-stream-
+            level reconstruction (better layout, separate pipeline).
 
         Bilingual mode: creates a new PDF with original pages followed
         by translated copies (one translated page per original page).
-        This avoids layout conflicts between English and Chinese text.
         """
+        if method == "pdf2zh":
+            return self.rebuild_via_pdf2zh(file_path)
+
         fitz = _get_fitz()
         output_path = self._output_path(file_path)
 
@@ -427,8 +496,6 @@ class PdfHandler(BaseHandler):
             # Sort by vertical position (top-to-bottom).
             page_frags.sort(key=lambda x: x[0].meta["bbox"][1])
 
-            page_bottom = page.rect.height - 30
-
             for i, (frag, trans) in enumerate(page_frags):
                 bbox = frag.meta["bbox"]
                 spans = frag.meta["spans"]
@@ -437,63 +504,18 @@ class PdfHandler(BaseHandler):
                 font_obj, _ = self._build_font_obj(
                     trans, spans[0].get("font", ""))
 
-                # ── Compute safe width that never overlaps neighbours ──
-                orig_w = bbox[2] - bbox[0]
-                page_max_w = page.rect.width - bbox[0] - 30
+                avail_w = max(bbox[2] - bbox[0], 20)
+                avail_h = max(bbox[3] - bbox[1], 20)
 
-                # Find the nearest block to the right within the same
-                # vertical band (y-overlap > 0).  The gap to that block
-                # is the hard right boundary for THIS block.
-                gap_to_right = page_max_w
-                for j, (f2, _) in enumerate(page_frags):
-                    if j == i:
-                        continue
-                    b2 = f2.meta["bbox"]
-                    # Vertical overlap?
-                    if bbox[3] <= b2[1] or b2[3] <= bbox[1]:
-                        continue  # no overlap — safe
-                    # b2 is to the right of this block?
-                    if b2[0] <= bbox[0]:
-                        continue  # b2 is to the left or at same x
-                    gap = b2[0] - bbox[0]
-                    if gap < gap_to_right:
-                        gap_to_right = gap
-
-                # Narrow block: expand 1.8x but stop at the neighbour.
-                if orig_w < 200:
-                    avail_w = max(orig_w * 1.8, 50)
-                    avail_w = min(avail_w, gap_to_right - 6)  # 6 px gutter
-                else:
-                    avail_w = gap_to_right - 6
-
-                avail_w = max(avail_w, 50)
-                avail_w = min(avail_w, page_max_w)
-                if avail_w <= 0:
-                    continue
-
-                # Height: space from this block's top to next block's top.
-                if i < len(page_frags) - 1:
-                    avail_h = page_frags[i + 1][0].meta["bbox"][1] - bbox[1]
-                else:
-                    avail_h = page_bottom - bbox[1]
-                # Floor: at least the original bbox height, and at least
-                # 20 px — otherwise fill_textbox rejects the rect.
-                avail_h = max(avail_h, bbox[3] - bbox[1], 20)
-                if avail_h <= 0:
-                    continue
-
-                # Find font size that exactly fits within avail_w × avail_h
                 opt_size = self._optimal_font_size(
                     trans, font_obj, avail_w, avail_h, orig_size)
 
-                # Redact original area
                 page.add_redact_annot(fitz.Rect(bbox))
                 try:
                     page.apply_redactions()
                 except Exception:
                     pass
 
-                # Check for rotated text
                 dir_vec = frag.meta.get("dir", (1.0, 0.0))
                 is_rotated = (abs(dir_vec[0] - 1.0) > 0.001
                               or abs(dir_vec[1]) > 0.001)
@@ -502,15 +524,9 @@ class PdfHandler(BaseHandler):
                     self._write_rotated_block(
                         page, frag, trans, font_obj, opt_size, color)
                 else:
-                    # Write rect: same x0/y0 as original, right edge at
-                    # col_right, bottom at y0 + avail_h.  These are the
-                    # EXACT dimensions _optimal_font_size was called with,
-                    # so fill_textbox won't overflow into the next block.
-                    write_rect = fitz.Rect(
-                        bbox[0], bbox[1], bbox[0] + avail_w, bbox[1] + avail_h)
                     self._write_block_with_textwriter(
-                        page, write_rect, trans, font_obj, opt_size, color,
-                        redact=False)
+                        page, fitz.Rect(bbox), trans, font_obj, opt_size,
+                        color, redact=False)
 
         tmp_path = output_path + ".trans.tmp"
         doc_trans.save(tmp_path)
