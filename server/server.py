@@ -400,12 +400,13 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
                 _update(task_id, status="error", error=f"PDFMathTranslate failed: {e}")
                 return
 
-            # Move output to output/ alongside other translated files
+            # Move output to output/
             os.makedirs(OUTPUT_DIR, exist_ok=True)
             final_name = os.path.basename(output_path)
             final_path = os.path.join(OUTPUT_DIR, final_name)
-            shutil.move(output_path, final_path)
-            output_path = final_path
+            if output_path != final_path:
+                shutil.move(output_path, final_path)
+                output_path = final_path
 
             _update(task_id, file_progress=100, file_total=100)
             _update(task_id, status="done",
