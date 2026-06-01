@@ -308,10 +308,16 @@ class PdfHandler(BaseHandler):
         return None
 
     @classmethod
-    def rebuild_via_pdf2zh(cls, file_path, output_dir=None, service="deepseek"):
+    def rebuild_via_pdf2zh(cls, file_path, output_dir=None, service="deepseek",
+                           vfont="", vchar=""):
         """Use PDFMathTranslate to translate and rebuild the PDF.
 
-        This bypasses our custom extract/translate/rebuild pipeline and
+        Args:
+            file_path: Path to the PDF.
+            output_dir: Directory for the output file (optional).
+            service: Translation service name.
+            vfont: Regex for formula font names. Empty = translate everything.
+            vchar: Regex for formula characters. Empty = translate everything.
         delegates to pdf2zh's content-stream-level reconstruction, which
         preserves layout significantly better than our bbox-based approach.
         """
@@ -327,7 +333,11 @@ class PdfHandler(BaseHandler):
 
         import glob as _glob
 
-        cmd = [exe, file_path, "-s", service]
+        cmd = [exe, file_path, "-s", service, "--ignore-cache"]
+        if vfont is not None:
+            cmd += ["--vfont", vfont]
+        if vchar is not None:
+            cmd += ["--vchar", vchar]
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         # pdf2zh writes {stem}-dual.pdf alongside its current working

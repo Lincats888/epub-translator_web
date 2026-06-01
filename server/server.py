@@ -363,7 +363,8 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
                 def _run_pdf2zh():
                     try:
                         result_holder[0] = PdfHandler.rebuild_via_pdf2zh(
-                            file_path, output_dir=os.path.dirname(file_path))
+                            file_path, output_dir=os.path.dirname(file_path),
+                            vfont="", vchar="")
                     except Exception as e:
                         error_holder[0] = e
                     done_flag.set()
@@ -573,11 +574,10 @@ async def start_translation(task_id: str, body: dict = None):
     # Get target language and mode from request body
     target_lang = "zh-CN"
     bilingual = True
-    pdf_method = "pdf2zh"
+    pdf_method = "pdf2zh"  # PDF always uses pdf2zh engine
     if body:
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
-        pdf_method = body.get("pdf_method", "pdf2zh")
     print(f"[DEBUG] pdf_method={pdf_method} file_type={task.get('file_type')} bilingual={bilingual}")
 
     _update(task_id, status="queued", step="Starting...", stopped=False,
