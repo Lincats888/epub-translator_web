@@ -16,10 +16,25 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo  [1/4] Checking dependencies...
+echo  [1/5] Checking dependencies...
 pip install -q fastapi uvicorn[standard] python-multipart openai pyyaml beautifulsoup4 lxml tqdm 2>nul
 
-echo  [2/4] Setting up PDFMathTranslate engine...
+echo  [2/5] Setting up BabelDOC engine...
+python -c "import babeldoc" 2>nul
+if errorlevel 1 (
+    echo  Installing BabelDOC (one-time setup)...
+    pip install -q BabelDOC -i https://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com 2>nul
+    python -c "import babeldoc" 2>nul
+    if not errorlevel 1 (
+        echo    BabelDOC: ready
+    ) else (
+        echo    BabelDOC: not available (PDF engine will fall back to others)
+    )
+) else (
+    echo    BabelDOC: ready
+)
+
+echo  [3/5] Setting up PDFMathTranslate engine...
 where pdf2zh >nul 2>&1
 if not errorlevel 1 (
     echo    PDFMathTranslate: ready ^(PATH^)
@@ -44,10 +59,10 @@ if not errorlevel 1 (
     )
 )
 
-echo  [3/4] Opening browser...
+echo  [4/5] Opening browser...
 start http://localhost:8080
 
-echo  [4/4] Starting server...
+echo  [5/5] Starting server...
 echo.
 echo  ================================================
 echo    Browser opened. Close this window to stop.
