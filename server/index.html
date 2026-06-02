@@ -170,9 +170,10 @@
             <option value="bilingual">双语</option>
             <option value="target_only">目标语言</option>
           </select>
-          <select id="pdf-method" style="display:none; padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
-            <option value="pdf2zh">引擎: PDFMathTranslate</option>
-            <option value="native">引擎: 原生</option>
+          <select id="trans-engine" style="display:none; padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
+            <option value="pdf2zh">PDFMathTranslate</option>
+            <option value="babeldoc">BabelDOC</option>
+            <option value="native">原生</option>
           </select>
         </div>
         <div class="book-actions">
@@ -472,7 +473,7 @@ function showBook(data, fileSize) {
   document.getElementById('book-title').textContent = data.title || data.filename;
   document.getElementById('book-author').textContent = data.author || '';
   const isPdf = data.filename && data.filename.toLowerCase().endsWith('.pdf');
-  document.getElementById('pdf-method').style.display = isPdf ? '' : 'none';
+  document.getElementById('trans-engine').style.display = isPdf ? '' : 'none';
   document.getElementById('book-size').innerHTML = '<strong>' + fmtSize(fileSize) + '</strong>';
   document.getElementById('book-date').innerHTML = '<strong>' + new Date().toLocaleDateString() + '</strong>';
   showStartButton();
@@ -498,11 +499,16 @@ function toggleTranslation() {
     btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
     const targetLang = document.getElementById('target-lang').value;
     const transMode = document.getElementById('trans-mode').value;
-    const pdfMethod = document.getElementById('pdf-method').value;
-    fetch(`/api/start/${taskId}`,{
+    const engine = document.getElementById('trans-engine').value;
+    const isBabeldoc = (engine === 'babeldoc');
+    const apiRoute = isBabeldoc ? `/api/start_babeldoc/${taskId}` : `/api/start/${taskId}`;
+    const bodyData = isBabeldoc
+      ? JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual'})
+      : JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual', pdf_method: engine});
+    fetch(apiRoute,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual', pdf_method: pdfMethod})
+      body: bodyData
     }).then(r=>r.json()).then(() => {
       btn.disabled = false; showStopButton(); startProgress();
     }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });

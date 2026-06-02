@@ -497,6 +497,58 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
         _update(task_id, status="error", error=str(e))
 
 
+def _run_translate_babeldoc(task_id: str, file_path: str, target_lang: str = "zh-CN",
+                             bilingual: bool = True):
+    """Background PDF translation using BabelDOC engine (one-shot IL pipeline)."""
+    try:
+        _update(task_id, status="loading", step="Loading configuration...")
+        config = Config(CONFIG_PATH)
+        config.load()
+        if not config.api_key or config.api_key in ("sk-xxxx", "sk-your-api-key-here"):
+            _update(task_id, status="error", error="API key not configured. Click settings.")
+            return
+
+        _update(task_id, step="Initializing BabelDOC...")
+
+        from handlers.pdf_babeldoc_handler import PdfBabeldocHandler
+        handler = PdfBabeldocHandler()
+
+        base_url = config.api_base.rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url += "/v1"
+
+        def progress_callback(stage, pct, msg):
+            if stage in ("init", "loading"):
+                _update(task_id, status="loading", step=msg, file_name="Preparing...")
+            elif stage in ("translate", "translating"):
+                _update(task_id, status="translating", step=msg,
+                        file_name=os.path.basename(file_path),
+                        file_progress=pct, file_total=100,
+                        total_files=1, current_file=1)
+            elif stage == "done":
+                _update(task_id, status="done", message=msg)
+            elif stage == "error":
+                _update(task_id, status="error", error=msg)
+
+        output = handler.translate_full(
+            file_path=file_path,
+            target_lang=target_lang,
+            source_lang="en",
+            api_key=config.api_key,
+            base_url=base_url,
+            model=config.model or "deepseek-chat",
+            bilingual=bilingual,
+            output_dir=OUTPUT_DIR,
+            progress_callback=progress_callback,
+        )
+
+        _update(task_id, status="done", step="Complete!",
+                output=output, translated=0, cached=0)
+
+    except Exception as e:
+        _update(task_id, status="error", error=str(e))
+
+
 # ── API Routes ─────────────────────────────────────────────────────────
 
 @app.post("/api/upload")
@@ -590,6 +642,32 @@ async def start_translation(task_id: str, body: dict = None):
     else:
         _executor.submit(_run_translate_generic, task_id, file_path,
                          target_lang, bilingual, pdf_method)
+
+    return {"ok": True}
+
+
+@app.post("/api/start_babeldoc/{task_id}")
+async def start_babeldoc_translation(task_id: str, body: dict = None):
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    if task.get("status") == "translating":
+        raise HTTPException(400, "Already translating")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+
+    target_lang = "zh-CN"
+    bilingual = True
+    if body:
+        target_lang = body.get("target_lang", target_lang)
+        bilingual = body.get("bilingual", True)
+
+    _update(task_id, status="queued", step="Starting BabelDOC...", stopped=False,
+            target_lang=target_lang, bilingual=bilingual)
+
+    _executor.submit(_run_translate_babeldoc, task_id, file_path,
+                     target_lang, bilingual)
 
     return {"ok": True}
 
