@@ -809,3 +809,17 @@ async def guide():
     guide_path = os.path.join(os.path.dirname(__file__), "guide.html")
     with open(guide_path, "r", encoding="utf-8") as f:
         return f.read()
+
+
+@app.get("/translate", response_class=HTMLResponse)
+async def translate_page():
+    path = os.path.join(os.path.dirname(__file__), "translate.html")
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    path = os.path.join(os.path.dirname(__file__), "login.html")
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()

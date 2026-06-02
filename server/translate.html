@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EbookTranslator</title>
+  <link rel="preconnect" href="https://fonts.loli.net">
+  <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #FCF9F5; --card: #FFFFFF; --text: #2D2D2D; --text2: #8A8A8A;
+      --accent: #C8956C; --accent-hover: #B8845B; --accent-light: #F5EDE6;
+      --border: #EDE8E2; --shadow: 0 2px 16px rgba(0,0,0,0.06);
+      --radius: 16px; --serif: 'Noto Serif SC', 'Georgia', serif;
+      --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    .app { max-width: 640px; margin: 0 auto; padding: 0 24px; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Header */
+    header { padding: 40px 0 32px; display: flex; align-items: center; gap: 12px; }
+    .logo { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; flex: 1; color: var(--accent); }
+
+    /* Lang Toggle */
+    .lang-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12px; font-weight: 600; }
+    .lang-toggle button { padding: 6px 12px; border: none; background: transparent; cursor: pointer; color: var(--text2); transition: all 0.2s; font-family: var(--sans); }
+    .lang-toggle button.active { background: var(--accent); color: #fff; }
+
+    /* Buttons */
+    .btn { font-family: var(--sans); font-size: 14px; font-weight: 500; padding: 10px 22px; border-radius: 12px; border: none; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(200,149,108,0.3); }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--card); color: var(--text); }
+    .btn-danger { background: #E85D5D; color: #fff; }
+    .btn-danger:hover { background: #D44D4D; }
+    .btn-download { background: #5DAA7E; color: #fff; box-shadow: 0 2px 8px rgba(93,170,126,0.3); }
+    .btn-download:hover { background: #4D9A6E; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text2); transition: all 0.2s; }
+    .icon-btn:hover { background: var(--card); color: var(--text); }
+
+    /* Welcome */
+    .welcome { flex: 1; display: flex; align-items: center; justify-content: center; }
+    .welcome-inner { text-align: center; width: 100%; }
+    .welcome-icon { width: 72px; height: 72px; margin: 0 auto 20px; border-radius: 20px; background: var(--accent-light); display: flex; align-items: center; justify-content: center; }
+    .welcome-icon svg { width: 32px; height: 32px; color: var(--accent); }
+    .welcome h2 { font-family: var(--serif); font-size: 26px; font-weight: 600; margin-bottom: 8px; }
+    .welcome p { color: var(--text2); font-size: 14px; margin-bottom: 28px; line-height: 1.7; }
+    .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px; cursor: pointer; transition: all 0.3s; position: relative; }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: var(--accent-light); }
+    .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-zone p { font-size: 14px; color: var(--text2); }
+    .upload-zone p strong { color: var(--text); font-weight: 500; }
+
+    /* Book Card */
+    .book-view { flex: 1; display: none; flex-direction: column; padding-bottom: 100px; }
+    .book-view.active { display: flex; }
+    .book-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 32px; display: flex; gap: 24px; align-items: flex-start; }
+    .book-icon { width: 64px; height: 80px; border-radius: 10px; background: linear-gradient(135deg, var(--accent-light), #E8E2DB); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .book-icon svg { width: 28px; height: 28px; color: var(--accent); }
+    .book-info { flex: 1; min-width: 0; }
+    .book-title { font-family: var(--serif); font-size: 20px; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+    .book-author { font-size: 14px; color: var(--text2); margin-bottom: 16px; }
+    .book-meta { display: flex; gap: 20px; flex-wrap: wrap; }
+    .meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); }
+    .meta-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .meta-item strong { color: var(--text); font-weight: 500; }
+    .book-actions { margin-top: 24px; display: flex; gap: 10px; }
+
+    /* Progress */
+    .progress-bar-wrap { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: var(--card); border-top: 1px solid var(--border); padding: 16px 24px; transform: translateY(100%); transition: transform 0.3s; }
+    .progress-bar-wrap.active { transform: translateY(0); }
+    .progress-inner { max-width: 640px; margin: 0 auto; }
+    .progress-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .progress-label { font-size: 13px; color: var(--text2); }
+    .progress-pct { font-size: 13px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .progress-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; width: 0%; background: linear-gradient(90deg, var(--accent), #D4A882); transition: width 0.4s; }
+    .progress-detail { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text2); }
+
+    /* Settings Modal */
+    .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: var(--card); border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0,0,0,0.15); width: 100%; max-width: 420px; margin: 16px; overflow: hidden; }
+    .modal-header { padding: 24px 24px 16px; display: flex; align-items: center; gap: 12px; }
+    .modal-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 600; flex: 1; }
+    .modal-close { width: 32px; height: 32px; border: none; background: none; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text2); }
+    .modal-close:hover { background: var(--accent-light); }
+    .modal-body { padding: 0 24px 24px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .field input, .field select { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; font-family: var(--sans); font-size: 14px; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.2s; }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+    .field-hint { font-size: 12px; color: var(--text2); margin-top: 4px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+    /* Disclaimer */
+    .disclaimer { padding: 32px 0 40px; text-align: center; }
+    .disclaimer p { font-size: 12px; color: var(--text2); line-height: 1.8; max-width: 480px; margin: 0 auto; }
+
+    /* Toast */
+    .toast { position: fixed; top: 24px; right: 24px; z-index: 200; padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,0.12); transform: translateX(120%); transition: transform 0.3s; }
+    .toast.show { transform: translateX(0); }
+    .toast-success { background: #E8F5EE; color: #2D7A4F; }
+    .toast-error { background: #FDECEC; color: #B83232; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <header>
+    <a href="/" style="text-decoration:none; color:var(--text2); font-size:13px; display:flex; align-items:center; gap:4px; margin-right:12px;" title="返回首页">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </a>
+    <a href="/" class="logo" style="text-decoration:none; display:flex; align-items:center; gap:8px;">
+      <svg class="logo-icon" viewBox="0 0 32 32" fill="none" style="width:30px;height:30px;flex-shrink:0;">
+        <circle cx="17" cy="15" r="8" stroke="currentColor" stroke-width="2"/>
+        <rect x="3" y="5" width="12" height="17" rx="2" stroke="currentColor" stroke-width="2" fill="var(--bg)"/>
+        <path d="M8 10h4M8 14h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      EbookTranslator
+    </a>
+    <button class="btn btn-primary" id="btn-open-book" onclick="openFilePicker()" data-i18n="openBook"></button>
+    <a href="/guide" class="icon-btn" title="User Guide" style="text-decoration:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    </a>
+    <button class="icon-btn" onclick="openSettings()" title="Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </header>
+
+  <input type="file" id="file-input" accept=".epub,.docx,.pdf" style="display:none" onchange="handleFile(this.files[0])">
+
+  <!-- Welcome -->
+  <div class="welcome" id="welcome-view">
+    <div class="welcome-inner">
+      <div class="welcome-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      </div>
+      <h2 data-i18n="welcomeTitle"></h2>
+      <p data-i18n="welcomeDesc"></p>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" accept=".epub,.docx,.pdf" onchange="handleFile(this.files[0])">
+        <p><strong data-i18n="dropHere"></strong><br><span data-i18n="orBrowse"></span></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Book View -->
+  <div class="book-view" id="book-view">
+    <div class="book-card">
+      <div class="book-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      </div>
+      <div class="book-info">
+        <div class="book-title" id="book-title">—</div>
+        <div class="book-author" id="book-author">—</div>
+        <div class="book-meta">
+          <div class="meta-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            <span id="book-size">—</span>
+          </div>
+          <div class="meta-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span id="book-date">—</span>
+          </div>
+        </div>
+        <div style="margin-top:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <span style="font-size:13px; color:var(--text2);" data-i18n="targetLang"></span>
+          <select id="target-lang" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
+          </select>
+          <select id="trans-mode" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
+            <option value="bilingual">双语</option>
+            <option value="target_only">目标语言</option>
+          </select>
+          <select id="trans-engine" style="display:none; padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
+            <option value="pdf2zh">PDFMathTranslate</option>
+            <option value="babeldoc">BabelDOC</option>
+            <option value="native">原生</option>
+          </select>
+        </div>
+        <div class="book-actions">
+          <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()" data-i18n="startBtn"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Disclaimer -->
+  <div class="disclaimer">
+    <p data-i18n="disclaimer"></p>
+    <p style="margin-top:12px; font-size:11px; color:var(--text2);">© Copyright 2026 老丁</p>
+  </div>
+</div>
+
+<!-- Progress Bar -->
+<div class="progress-bar-wrap" id="progress-bar">
+  <div class="progress-inner">
+    <div class="progress-top">
+      <span class="progress-label" id="progress-label" data-i18n="translating"></span>
+      <span class="progress-pct" id="progress-pct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-detail">
+      <span id="progress-files">0 / 0 <span data-i18n="files"></span></span>
+      <span id="progress-time">0s</span>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      <h3 data-i18n="settingsTitle"></h3>
+      <button class="modal-close" onclick="closeSettings()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="api-key-warning" style="display:none; padding:12px 16px; margin-bottom:16px; background:#FDECEC; border:1px solid #F5C6C6; border-radius:10px; font-size:13px; color:#B83232; display:none; align-items:center; gap:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span data-i18n="apiKeyWarning"></span>
+      </div>
+      <div class="field">
+        <label>
+          <span data-i18n="apiKeyLabel"></span>
+          <span id="cfg-encrypted-badge" style="display:none; margin-left:8px; font-size:11px; font-weight:600; color:#5DAA7E; background:#E8F5EE; padding:2px 8px; border-radius:6px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px; margin-right:2px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            <span data-i18n="encrypted"></span>
+          </span>
+        </label>
+        <input id="cfg-key" type="password" placeholder="sk-xxxxxxxxxxxx" oninput="checkKeyInput()">
+        <div class="field-hint" id="cfg-key-hint"></div>
+      </div>
+      <div class="field">
+        <label data-i18n="apiBaseLabel"></label>
+        <input id="cfg-base" type="text" placeholder="https://api.deepseek.com">
+      </div>
+      <div class="field">
+        <label data-i18n="modelLabel"></label>
+        <input id="cfg-model" type="text" placeholder="deepseek-chat">
+      </div>
+      <div class="field">
+        <label data-i18n="modeLabel"></label>
+        <select id="cfg-mode">
+          <option value="bilingual" data-i18n="modeBilingual"></option>
+          <option value="chinese_only" data-i18n="modeChineseOnly"></option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()" data-i18n="cancel"></button>
+      <button class="btn btn-primary" id="btn-save" onclick="saveSettings()" data-i18n="save"></button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── i18n ───────────────────────────────────────────────────────────
+// Language is set on the homepage and stored in localStorage.
+// This page reads it — no language toggle here.
+let lang = localStorage.getItem('epub-lang') || 'zh';
+
+const i18n = {
+  zh: {
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> 打开文件',
+    welcomeTitle: '翻译你的电子书',
+    welcomeDesc: '支持 EPUB、Word、PDF 文档<br>拖放到这里一键翻译为任意语言。',
+    dropHere: '将文件拖放到这里',
+    orBrowse: '或点击选择文件',
+    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始翻译',
+    targetLang: '目标语言：',
+    stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止',
+    downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载',
+    translating: '翻译中...',
+    files: '个文件',
+    fragments: '个片段',
+    done: '翻译完成！',
+    stopped: '已停止',
+    settingsTitle: 'API 设置',
+    apiKeyLabel: 'API Key',
+    apiBaseLabel: 'API 地址',
+    modelLabel: '模型',
+    modeLabel: '翻译模式',
+    modeBilingual: '双语（原文 + 译文）',
+    modeChineseOnly: '目标语言（只保留译文）',
+    cancel: '取消',
+    save: '保存',
+    saving: '保存中...',
+    saved: '已保存',
+    loadBook: '加载中...',
+    bookLoaded: '书籍已加载',
+    uploadFail: '上传失败：',
+    selectFile: '请选择 .epub、.docx 或 .pdf 文件',
+    startFail: '启动失败：',
+    fileTooLarge: '文件过大（最大 100 MB）',
+    transComplete: '翻译完成！',
+    transStopped: '翻译已停止',
+    transFailed: '翻译失败',
+    notConfigured: '未配置',
+    applyKey: '点击申请 API Key',
+    currentKey: '当前：',
+    encrypted: 'API Key 已加密存储',
+    apiKeyWarning: '请先输入 API Key 才能使用翻译功能',
+    disclaimer: '本工具仅供个人学习和研究使用。翻译结果由 AI 模型生成，可能存在不准确之处，仅供参考。上传的文件将在翻译完成后自动删除，请勿上传涉及版权争议的内容。使用本工具即表示您接受以上条款。',
+  },
+  en: {
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Open File',
+    welcomeTitle: 'Translate Your Documents',
+    welcomeDesc: 'Supports EPUB, Word and PDF documents.<br>Drop a file here to translate into any language.',
+    dropHere: 'Drop your file here',
+    orBrowse: 'or click to browse',
+    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation',
+    targetLang: 'Target: ',
+    stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop',
+    downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download',
+    translating: 'Translating...',
+    files: 'files',
+    fragments: 'fragments',
+    done: 'Translation complete!',
+    stopped: 'Stopped',
+    settingsTitle: 'API Settings',
+    apiKeyLabel: 'API Key',
+    apiBaseLabel: 'API Base URL',
+    modelLabel: 'Model',
+    modeLabel: 'Translation Mode',
+    modeBilingual: 'Bilingual (Original + Translation)',
+    modeChineseOnly: 'Target Language Only',
+    cancel: 'Cancel',
+    save: 'Save',
+    saving: 'Saving...',
+    saved: 'Saved',
+    loadBook: 'Loading...',
+    bookLoaded: 'Book loaded',
+    uploadFail: 'Upload failed: ',
+    selectFile: 'Please select an .epub, .docx or .pdf file',
+    startFail: 'Failed to start: ',
+    fileTooLarge: 'File too large (max 100 MB)',
+    transComplete: 'Translation complete!',
+    transStopped: 'Translation stopped',
+    transFailed: 'Translation failed',
+    notConfigured: 'Not configured',
+    applyKey: 'Apply for API Key',
+    currentKey: 'Current: ',
+    encrypted: 'API Key is encrypted',
+    apiKeyWarning: 'Please enter your API Key to use the translation feature',
+    disclaimer: 'This tool is for personal learning and research purposes only. Translation results are generated by AI models and may contain inaccuracies. Uploaded files are automatically deleted after translation. By using this tool, you agree to these terms.',
+  }
+};
+
+function t(key) { return i18n[lang][key] || key; }
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('epub-lang', l);
+  document.getElementById('lang-zh').classList.toggle('active', l === 'zh');
+  document.getElementById('lang-en').classList.toggle('active', l === 'en');
+  document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
+  applyLang();
+  loadLanguages();
+}
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if (val.includes('<svg') || val.includes('<')) el.innerHTML = val;
+    else el.textContent = val;
+  });
+  // Update placeholders
+  document.getElementById('cfg-key').placeholder = 'sk-xxxxxxxxxxxx';
+}
+
+// ── State ─────────────────────────────────────────────────────────
+let taskId = null, eventSource = null, timerInterval = null, startTime = 0;
+let apiKeyReady = false;
+
+document.addEventListener('DOMContentLoaded', () => { applyLang(); checkConfig(); loadLanguages(); });
+
+// ── Languages ──────────────────────────────────────────────────────
+function loadLanguages() {
+  fetch('/api/languages?ui=' + lang).then(r=>r.json()).then(list => {
+    const sel = document.getElementById('target-lang');
+    sel.innerHTML = '';
+    list.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l.code;
+      opt.textContent = l.name;
+      if (l.code === 'zh-CN') opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ── Config ────────────────────────────────────────────────────────
+function checkConfig() {
+  fetch('/api/config').then(r=>r.json()).then(c => {
+    if (c.api_key_set) {
+      apiKeyReady = true;
+      document.getElementById('btn-open-book').disabled = false;
+    } else {
+      apiKeyReady = false;
+      document.getElementById('btn-open-book').disabled = true;
+      openSettings();
+    }
+  }).catch(()=>{});
+}
+function openSettings() {
+  fetch('/api/config').then(r=>r.json()).then(c => {
+    document.getElementById('cfg-key').value = '';
+    document.getElementById('cfg-base').value = c.api_base||'';
+    document.getElementById('cfg-model').value = c.model||'';
+    document.getElementById('cfg-mode').value = c.translation_mode||'bilingual';
+    document.getElementById('cfg-key-hint').innerHTML = c.api_key_set
+      ? t('currentKey')+c.api_key_masked
+      : t('notConfigured') + ' — <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent);text-decoration:underline;">' + t('applyKey') + '</a>';
+    const badge = document.getElementById('cfg-encrypted-badge');
+    badge.style.display = (c.api_key_set && c.api_key_encrypted) ? 'inline-block' : 'none';
+    const warning = document.getElementById('api-key-warning');
+    warning.style.display = c.api_key_set ? 'none' : 'flex';
+    document.getElementById('settings-modal').classList.add('active');
+  });
+}
+function checkKeyInput() {
+  const val = document.getElementById('cfg-key').value.trim();
+  const warning = document.getElementById('api-key-warning');
+  warning.style.display = val ? 'none' : 'flex';
+}
+function closeSettings() { document.getElementById('settings-modal').classList.remove('active'); }
+function saveSettings() {
+  const b = { api_base: document.getElementById('cfg-base').value, model: document.getElementById('cfg-model').value, translation_mode: document.getElementById('cfg-mode').value };
+  const k = document.getElementById('cfg-key').value.trim();
+  if (k) b.api_key = k;
+  const btn = document.getElementById('btn-save'); btn.textContent=t('saving'); btn.disabled=true;
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
+    .then(r=>r.json()).then((resp)=>{
+      btn.textContent=t('saved');
+      apiKeyReady = true;
+      document.getElementById('btn-open-book').disabled = false;
+      const actionBtn = document.getElementById('btn-action');
+      if (actionBtn) actionBtn.disabled = false;
+      setTimeout(()=>{closeSettings();btn.textContent=t('save');btn.disabled=false;},500);
+    })
+    .catch(e=>{ btn.textContent=t('save'); btn.disabled=false; toast(t('uploadFail')+e.message,'error'); });
+}
+
+// ── Upload ────────────────────────────────────────────────────────
+function openFilePicker() { document.getElementById('file-input').click(); }
+const uz = document.getElementById('upload-zone');
+if (uz) {
+  ['dragenter','dragover'].forEach(e => uz.addEventListener(e,ev=>{ev.preventDefault();uz.classList.add('dragover');}));
+  ['dragleave','drop'].forEach(e => uz.addEventListener(e,ev=>{ev.preventDefault();uz.classList.remove('dragover');}));
+  uz.addEventListener('drop', ev => { const f=ev.dataTransfer.files[0]; if(f) handleFile(f); });
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.toLowerCase().split('.').pop();
+  if (!['epub','docx','pdf'].includes(ext)) { toast(t('selectFile'),'error'); return; }
+  if (file.size > 100*1024*1024) { toast(t('fileTooLarge'),'error'); return; }
+  const form = new FormData(); form.append('file', file);
+  toast(t('loadBook'),'');
+  fetch('/api/upload',{method:'POST',body:form}).then(r=>r.json()).then(data => {
+    if (data.detail) { toast(data.detail,'error'); return; }
+    taskId = data.task_id;
+    showBook(data, file.size);
+    toast(t('bookLoaded'),'');
+  }).catch(e => toast(t('uploadFail')+e.message,'error'));
+}
+
+function showBook(data, fileSize) {
+  document.getElementById('welcome-view').style.display = 'none';
+  document.getElementById('book-view').classList.add('active');
+  document.getElementById('book-title').textContent = data.title || data.filename;
+  document.getElementById('book-author').textContent = data.author || '';
+  const isPdf = data.filename && data.filename.toLowerCase().endsWith('.pdf');
+  document.getElementById('trans-engine').style.display = isPdf ? '' : 'none';
+  document.getElementById('book-size').innerHTML = '<strong>' + fmtSize(fileSize) + '</strong>';
+  document.getElementById('book-date').innerHTML = '<strong>' + new Date().toLocaleDateString() + '</strong>';
+  showStartButton();
+  if (!apiKeyReady) {
+    document.getElementById('btn-action').disabled = true;
+    openSettings();
+  }
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+// ── Translation ───────────────────────────────────────────────────
+function toggleTranslation() {
+  if (!apiKeyReady) { openSettings(); return; }
+  const btn = document.getElementById('btn-action');
+  const status = btn.dataset.status;
+  if (!status || status === 'done' || status === 'error' || status === 'stopped') {
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Starting...';
+    btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
+    const targetLang = document.getElementById('target-lang').value;
+    const transMode = document.getElementById('trans-mode').value;
+    const engine = document.getElementById('trans-engine').value;
+    const isBabeldoc = (engine === 'babeldoc');
+    const apiRoute = isBabeldoc ? `/api/start_babeldoc/${taskId}` : `/api/start/${taskId}`;
+    const bodyData = isBabeldoc
+      ? JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual'})
+      : JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual', pdf_method: engine});
+    fetch(apiRoute,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: bodyData
+    }).then(r=>r.json()).then(() => {
+      btn.disabled = false; showStopButton(); startProgress();
+    }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });
+  } else if (status === 'translating' || status === 'loading' || status === 'queued') {
+    fetch(`/api/stop/${taskId}`,{method:'POST'}).then(()=>{});
+    btn.innerHTML = 'Stopping...'; btn.disabled = true;
+  }
+}
+function showStopButton() {
+  const btn = document.getElementById('btn-action'); btn.dataset.status = 'translating';
+  btn.innerHTML = t('stopBtn');
+  btn.classList.remove('btn-primary','btn-download'); btn.classList.add('btn-danger');
+}
+function showStartButton() {
+  const btn = document.getElementById('btn-action'); btn.dataset.status = '';
+  btn.innerHTML = t('startBtn');
+  btn.classList.remove('btn-danger','btn-download'); btn.classList.add('btn-primary'); btn.onclick = toggleTranslation;
+}
+function showDownloadButton() {
+  const btn = document.getElementById('btn-action'); btn.dataset.status = 'done';
+  btn.innerHTML = t('downloadBtn');
+  btn.classList.remove('btn-danger','btn-primary'); btn.classList.add('btn-download');
+  btn.onclick = () => { window.location = `/api/download/${taskId}`; };
+}
+
+// ── Progress ──────────────────────────────────────────────────────
+function startProgress() {
+  startTime = Date.now();
+  document.getElementById('progress-bar').classList.add('active');
+  timerInterval = setInterval(() => { document.getElementById('progress-time').textContent = fmtTime((Date.now()-startTime)/1000); }, 1000);
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`/api/progress/${taskId}`);
+  eventSource.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.status === 'translating') {
+      // EPUB: file count for progress. DOCX/PDF: fragment count
+      const multiFile = (d.total_files||0) > 1;
+      const done = multiFile ? (d.current_file||0) : (d.file_progress||0);
+      const total = multiFile ? (d.total_files||0) : (d.file_total||0);
+      const pct = total>0 ? Math.round(done/total*100) : 0;
+      const unit = multiFile ? t('files') : t('fragments');
+      document.getElementById('progress-fill').style.width = pct+'%';
+      document.getElementById('progress-pct').textContent = pct+'%';
+      document.getElementById('progress-files').innerHTML = `${done} / ${total} ${unit}`;
+      document.getElementById('progress-label').textContent = d.file_name ? d.file_name.split('/').pop() : t('translating');
+      showStopButton();
+    } else if (d.status === 'done') { finishProgress(d); }
+    else if (d.status === 'error') { errorProgress(d); }
+    else if (d.status === 'stopped') { stoppedProgress(); }
+  };
+  eventSource.onerror = () => { eventSource.close(); };
+}
+function finishProgress(d) {
+  clearInterval(timerInterval); eventSource.close();
+  document.getElementById('progress-fill').style.width = '100%';
+  document.getElementById('progress-pct').textContent = '100%';
+  document.getElementById('progress-label').textContent = t('done');
+  document.getElementById('progress-files').innerHTML = `${d.translated||0} translated · ${d.cached||0} cached · ${fmtTime((Date.now()-startTime)/1000)}`;
+  showDownloadButton(); toast(t('transComplete'),'success');
+}
+function errorProgress(d) { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Error: '+(d.error||'Unknown'); showStartButton(); toast(d.error||t('transFailed'),'error'); }
+function stoppedProgress() { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = t('stopped'); showStartButton(); toast(t('transStopped'),''); }
+
+// ── Helpers ───────────────────────────────────────────────────────
+function toast(msg, type) { const el = document.getElementById('toast'); el.textContent = msg; el.className = 'toast'+(type==='success'?' toast-success':'')+(type==='error'?' toast-error':''); setTimeout(()=>el.classList.add('show'),10); setTimeout(()=>el.classList.remove('show'),3000); }
+function fmtTime(s) { if (s<60) return Math.round(s)+'s'; return Math.floor(s/60)+'m '+Math.round(s%60)+'s'; }
+</script>
+</body>
+</html>
