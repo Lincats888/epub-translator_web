@@ -8,3 +8,5 @@ python-docx>=1.0.0
 pyyaml>=6.0
 tqdm>=4.66.0
 pytest>=8.0.0
+easyocr>=1.7
+opencv-python>=4.8

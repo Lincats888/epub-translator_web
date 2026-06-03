@@ -34,7 +34,7 @@ from epub_translator.config import Config
 from epub_translator.extractor import EpubExtractor
 from epub_translator.cache import TranslationCache
 from epub_translator.parser import parse_file
-from epub_translator.translator import Translator
+from epub_translator.translator import Translator, StopTranslation
 from epub_translator.rebuilder import inject_line_height, rebuild_epub
 from epub_translator.crypto import encrypt, decrypt, is_encrypted
 
@@ -362,9 +362,15 @@ def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN", bil
                             file_name=_rn, file_progress=min(done, _ft),
                             file_total=_ft)
 
-                translations_result = translator_obj.translate_all(
-                    uncached_texts, progress_callback=on_progress
-                )
+                try:
+                    translations_result = translator_obj.translate_all(
+                        uncached_texts, progress_callback=on_progress,
+                        stop_check=lambda: _tasks.get(task_id, {}).get("stopped", False)
+                    )
+                except StopTranslation:
+                    cache.flush()
+                    _update(task_id, status="stopped", step="Stopped by user")
+                    return
 
                 file_translations = [None] * len(parsed.fragments)
                 for i, frag in enumerate(parsed.fragments):
@@ -425,6 +431,8 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
                     elapsed = 0
                     while not heartbeat_stop.is_set():
                         heartbeat_stop.wait(1.5)
+                        if _tasks.get(task_id, {}).get("stopped"):
+                            break  # Stop updating progress
                         elapsed += 1.5
                         # Simulated progress: estimate ~3s per page, cap at 95%
                         pages = _doc_page_count(file_path)
@@ -445,6 +453,11 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
                 if error_holder[0]:
                     _update(task_id, status="error",
                             error=f"PDFMathTranslate failed: {error_holder[0]}")
+                    return
+
+                # Check if user stopped during pdf2zh run
+                if _tasks.get(task_id, {}).get("stopped"):
+                    _update(task_id, status="stopped", step="Stopped by user")
                     return
 
                 output_path = result_holder[0]
@@ -481,8 +494,80 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
 
         fragments = handler.extract(file_path, bilingual=bilingual)
 
+        # ── Scanned PDF → OCR + Image Rebuild ───────────────────────────
+        _is_scanned = False
+        if file_path.lower().endswith(".pdf") and config.ocr_enabled:
+            from handlers.pdf_ocr import PdfOcr
+            _is_scanned = PdfOcr.is_scanned(file_path)
+
+            if _is_scanned:
+                _update(task_id, step="Scanned PDF detected, detecting text blocks...",
+                        file_name=os.path.basename(file_path),
+                        file_progress=0, file_total=100)
+
+                try:
+                    from handlers.pdf_scanned_handler import PdfScannedRebuilder
+
+                    # 1. Detect text blocks on all pages
+                    rebuilder = PdfScannedRebuilder()
+                    blocks_per_page = rebuilder.detect_all_pages(file_path)
+                    all_texts = [b["text"] for pb in blocks_per_page for b in pb]
+                    total_blocks = len(all_texts)
+
+                    if not all_texts:
+                        _update(task_id, status="error",
+                                error="OCR detected no text on scanned PDF pages.")
+                        return
+
+                    _update(task_id, status="translating",
+                            step=f"Translating {total_blocks} text blocks...",
+                            current_file=0, total_files=1,
+                            file_name=os.path.basename(file_path),
+                            file_progress=0, file_total=total_blocks)
+
+                    # 2. Translate all detected text blocks
+                    translator_obj = Translator(config, target_lang, bilingual)
+
+                    def on_progress(done):
+                        _update(task_id, file_progress=min(done, total_blocks),
+                                file_total=total_blocks)
+
+                    all_translations = translator_obj.translate_all(
+                        all_texts, progress_callback=on_progress,
+                        stop_check=lambda: _tasks.get(task_id, {}).get("stopped", False)
+                    )
+
+                    # 3. Group translations by page
+                    trans_per_page = []
+                    idx = 0
+                    for page_blocks in blocks_per_page:
+                        page_trans = all_translations[idx:idx + len(page_blocks)]
+                        trans_per_page.append(page_trans)
+                        idx += len(page_blocks)
+
+                    # 4. Rebuild PDF with erased originals + translation overlay
+                    _update(task_id, step="Rebuilding PDF with translation overlay...",
+                            file_progress=total_blocks, file_total=total_blocks)
+
+                    output_path = rebuilder.rebuild(
+                        file_path, trans_per_page,
+                        bilingual=bilingual,
+                    )
+
+                    _update(task_id, status="done", step="Complete!",
+                            output=output_path, translated=total_blocks, cached=0)
+                    return
+
+                except Exception as e:
+                    _update(task_id, status="error", error=f"OCR rebuild failed: {e}")
+                    return
+
         if not fragments:
-            _update(task_id, status="error", error="No translatable content found.")
+            if _is_scanned:
+                _update(task_id, status="error", error="OCR did not find any text on this scanned PDF.")
+            else:
+                _update(task_id, status="error",
+                        error="No translatable content found. If this is a scanned PDF, enable OCR in settings.")
             return
 
         # Source language detection
@@ -510,12 +595,40 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
         texts = [f.text for f in fragments]
         progress_state = {"count": 0}
 
+        # Use cache for DOCX/PDF to support stop & resume
+        cache = TranslationCache(os.path.dirname(file_path))
+        cache.load()
+        uncached_texts, uncached_indices = cache.batch_get(texts)
+        total_cached = len(texts) - len(uncached_texts)
+
         def on_progress(done):
             progress_state["count"] = min(done, total)
             _update(task_id, file_progress=progress_state["count"], file_total=total)
 
-        all_translations = translator_obj.translate_all(
-            texts, progress_callback=on_progress)
+        if uncached_texts:
+            try:
+                new_translations = translator_obj.translate_all(
+                    uncached_texts, progress_callback=on_progress,
+                    stop_check=lambda: _tasks.get(task_id, {}).get("stopped", False)
+                )
+            except StopTranslation:
+                _update(task_id, status="stopped", step="Stopped by user")
+                return
+
+            # Save new translations to cache
+            for text, trans in zip(uncached_texts, new_translations):
+                cache.put(text, trans)
+            cache.flush()
+
+            # Merge cached + new translations in original order
+            all_translations = [None] * len(texts)
+            for i, text in enumerate(texts):
+                if i not in uncached_indices:
+                    all_translations[i] = cache.get(text)
+            for idx, trans in zip(uncached_indices, new_translations):
+                all_translations[idx] = trans
+        else:
+            all_translations = [cache.get(t) for t in texts]
 
         # Retry English-only lines concurrently
         import re
@@ -570,6 +683,9 @@ def _run_translate_babeldoc(task_id: str, file_path: str, target_lang: str = "zh
             base_url += "/v1"
 
         def progress_callback(stage, pct, msg):
+            # Don't update progress if user has stopped
+            if _tasks.get(task_id, {}).get("stopped"):
+                return
             if stage in ("init", "loading"):
                 _update(task_id, status="loading", step=msg, file_name="Preparing...")
             elif stage in ("translate", "translating"):
@@ -593,6 +709,11 @@ def _run_translate_babeldoc(task_id: str, file_path: str, target_lang: str = "zh
             output_dir=OUTPUT_DIR,
             progress_callback=progress_callback,
         )
+
+        # Check if stopped during translation
+        if _tasks.get(task_id, {}).get("stopped"):
+            _update(task_id, status="stopped", step="Stopped by user")
+            return
 
         _update(task_id, status="done", step="Complete!",
                 output=output, translated=0, cached=0)
@@ -625,11 +746,20 @@ async def upload_file(file: UploadFile = File(...)):
 
     # Read metadata based on file type
     ext = os.path.splitext(file.filename)[1].lower()
+    is_scanned = False
     if ext == ".epub":
         try:
             meta = _read_epub_meta(file_path)
         except Exception:
             meta = {"title": file.filename, "author": "", "cover": None, "toc": []}
+    elif ext == ".pdf":
+        meta = {"title": file.filename, "author": "", "cover": None, "toc": []}
+        # Check if it's a scanned PDF (image-based, no text layer)
+        try:
+            from handlers.pdf_ocr import PdfOcr
+            is_scanned = PdfOcr.is_scanned(file_path)
+        except Exception:
+            pass
     else:
         meta = {"title": file.filename, "author": "", "cover": None, "toc": []}
 
@@ -649,6 +779,7 @@ async def upload_file(file: UploadFile = File(...)):
         "author": meta.get("author", ""),
         "cover": meta.get("cover"),
         "toc": meta.get("toc", []),
+        "is_scanned": is_scanned,
     }
 
 
@@ -972,6 +1103,7 @@ async def get_config():
         "api_base": cfg.get("api_base", ""),
         "model": cfg.get("model", ""),
         "translation_mode": cfg.get("translation_mode", "bilingual"),
+        "ocr_enabled": cfg.get("ocr_enabled", True),
     }
 
 
@@ -993,6 +1125,9 @@ async def update_config(body: dict):
         cfg["model"] = body["model"].strip()
     if "translation_mode" in body:
         cfg["translation_mode"] = body["translation_mode"]
+    # OCR settings
+    if "ocr_enabled" in body:
+        cfg["ocr_enabled"] = body["ocr_enabled"]
 
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)

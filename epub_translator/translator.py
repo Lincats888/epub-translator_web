@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 TRANSLATION_DELIMITER = "|||"
 
 
+class StopTranslation(Exception):
+    """Raised when translation is stopped by user."""
+    pass
+
+
 class Translator:
     def __init__(self, config: Config, target_lang: str = "zh-CN", bilingual: bool = True):
         self._config = config
@@ -129,10 +134,16 @@ class Translator:
 
         return texts
 
-    def translate_all(self, texts: list[str], progress_callback=None) -> list[str]:
+    def translate_all(self, texts: list[str], progress_callback=None,
+                      stop_check=None) -> list[str]:
         """Translate all texts using concurrent batch requests.
 
         Splits texts into batches and sends them in parallel via ThreadPoolExecutor.
+
+        Args:
+            texts: List of text strings to translate.
+            progress_callback: Called after each batch completes with count of done items.
+            stop_check: Called after each batch. If returns True, raises StopTranslation.
         """
         if not texts:
             return []
@@ -163,6 +174,9 @@ class Translator:
 
                 if progress_callback:
                     progress_callback(len(results) * batch_size)
+
+                if stop_check and stop_check():
+                    raise StopTranslation("Translation stopped by user")
 
         # Reassemble in order
         all_translations = []

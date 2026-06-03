@@ -16,6 +16,11 @@ DEFAULT_CONFIG = {
     "api_timeout": 120,
     "temperature": 0.3,
     "skip_tags": ["script", "style", "code", "pre"],
+    # OCR settings (scanned PDF support)
+    "ocr_enabled": True,
+    "ocr_api_key": "",
+    "ocr_api_base": "https://api.siliconflow.com",
+    "ocr_model": "Qwen/Qwen3-VL-32B-Instruct",
 }
 
 
@@ -100,3 +105,26 @@ class Config:
     @property
     def skip_tags(self) -> list:
         return self._data.get("skip_tags", ["script", "style", "code", "pre"])
+
+    # ── OCR settings ──────────────────────────────────────────────────
+
+    @property
+    def ocr_enabled(self) -> bool:
+        return self._data.get("ocr_enabled", True)
+
+    @property
+    def ocr_api_key(self) -> str:
+        raw = self._data.get("ocr_api_key", "")
+        if is_encrypted(raw):
+            return decrypt(raw)
+        return raw
+
+    @property
+    def ocr_api_base(self) -> str:
+        val = self._data.get("ocr_api_base", "")
+        return val if val else "https://api.siliconflow.com"
+
+    @property
+    def ocr_model(self) -> str:
+        val = self._data.get("ocr_model", "")
+        return val if val else "Qwen/Qwen3-VL-32B-Instruct"

@@ -151,6 +151,13 @@ class PdfBabeldocHandler(BaseHandler):
             OnnxModel,
         ) = _get_api()
 
+        # BabelDOC has a module-level global rate limiter defaulting to
+        # 5 QPS (RateLimiter(5) in translator.py). Our qps=10 below only
+        # affects pool_max_workers, not the actual API call rate.
+        # Raise it to 10 QPS to double translation throughput.
+        from babeldoc.translator.translator import set_translate_rate_limiter
+        set_translate_rate_limiter(10)
+
         # ── 2. Build config ──
         model = model or "deepseek-chat"
         base_url = base_url or "https://api.deepseek.com/v1"
@@ -199,6 +206,12 @@ class PdfBabeldocHandler(BaseHandler):
             no_dual=not bilingual,
             # ── Quality ──
             use_alternating_pages_dual=True,   # 交替页面双语（与原生 PDF 相同模式）
+            use_side_by_side_dual=False,        # 禁用同页并排（默认 True 会导致中文覆盖英文）
+            # ── Skip BabelDOC's own scan detection ──
+            skip_scanned_detection=True,
+            # Skip automatic glossary extraction — saves 30-90s of
+            # extra LLM API calls before translation starts.
+            auto_extract_glossary=False,
         )
 
         # ── 3. Run translation with live progress ──
@@ -292,6 +305,10 @@ class PdfBabeldocHandler(BaseHandler):
         from babeldoc.format.pdf.translation_config import TranslationConfig, WatermarkOutputMode
         from babeldoc.translator.translator import OpenAITranslator
 
+        # Raise global rate limiter from default 5 QPS to 10 QPS
+        from babeldoc.translator.translator import set_translate_rate_limiter
+        set_translate_rate_limiter(10)
+
         model = model or "deepseek-chat"
         base_url = base_url or "https://api.deepseek.com/v1"
         if output_dir is None:
@@ -317,6 +334,9 @@ class PdfBabeldocHandler(BaseHandler):
             no_mono=bilingual,
             no_dual=not bilingual,
             use_alternating_pages_dual=True,
+            use_side_by_side_dual=False,
+            skip_scanned_detection=True,
+            auto_extract_glossary=False,
         )
 
         try:

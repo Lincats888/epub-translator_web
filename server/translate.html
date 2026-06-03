@@ -68,6 +68,8 @@
     .meta-item svg { width: 14px; height: 14px; flex-shrink: 0; }
     .meta-item strong { color: var(--text); font-weight: 500; }
     .book-actions { margin-top: 24px; display: flex; gap: 10px; }
+    .scanned-badge { display: none; margin-top: 12px; padding: 8px 14px; background: #FFF3E0; border: 1px solid #FFB74D; border-radius: 8px; font-size: 13px; color: #E65100; align-items: center; gap: 6px; }
+    .scanned-badge.show { display: inline-flex; }
 
     /* Progress */
     .progress-bar-wrap { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: var(--card); border-top: 1px solid var(--border); padding: 16px 24px; transform: translateY(100%); transition: transform 0.3s; }
@@ -79,6 +81,21 @@
     .progress-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
     .progress-fill { height: 100%; border-radius: 3px; width: 0%; background: linear-gradient(90deg, var(--accent), #D4A882); transition: width 0.4s; }
     .progress-detail { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text2); }
+
+    /* Upload Progress (inside upload-zone) */
+    .upload-zone.uploading { cursor: default; pointer-events: none; }
+    .upload-zone.uploading > p { display: none; }
+    .upload-progress { width: 100%; }
+    .upload-progress .up-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .upload-progress .up-icon { color: var(--accent); flex-shrink: 0; }
+    .upload-progress .up-filename { font-size: 14px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .upload-progress .up-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+    .upload-progress .up-fill { height: 100%; border-radius: 3px; width: 0%; background: linear-gradient(90deg, var(--accent), #D4A882); transition: width 0.3s; }
+    .upload-progress .up-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
+    .upload-progress .up-meta span { min-width: 50px; }
+    .upload-progress .up-meta span:first-child { text-align: left; }
+    .upload-progress .up-meta span:nth-child(2) { text-align: center; font-weight: 600; color: var(--accent); }
+    .upload-progress .up-meta span:last-child { text-align: right; }
 
     /* Settings Modal */
     .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; }
@@ -94,6 +111,7 @@
     .field input, .field select { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; font-family: var(--sans); font-size: 14px; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.2s; }
     .field input:focus, .field select:focus { border-color: var(--accent); }
     .field-hint { font-size: 12px; color: var(--text2); margin-top: 4px; }
+    .settings-divider { padding: 8px 0 4px; margin-bottom: 8px; border-top: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
     .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
 
     /* Disclaimer */
@@ -177,6 +195,8 @@
       max-width: 100%;
       overflow-x: auto;
       min-height: 200px;
+      content-visibility: auto;
+      contain-intrinsic-size: auto 2000px;
     }
     .preview-reader p { margin-bottom: 1em; }
     .preview-reader img { max-width: 100%; height: auto; border-radius: 4px; }
@@ -199,12 +219,12 @@
 
     /* PDF Pages */
     .preview-pages { padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; background: #f0f0f0; }
-    .preview-page-wrap { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 4px; overflow: hidden; max-width: 100%; }
-    .preview-page-img { display: block; width: 100%; height: auto; }
+    .preview-page-wrap { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 4px; overflow: hidden; max-width: 100%; content-visibility: auto; contain-intrinsic-size: auto 600px; }
+    .preview-page-img { display: block; width: 100%; height: auto; max-height: 90vh; object-fit: contain; }
     .preview-page-label { font-size: 12px; color: var(--text2); text-align: center; padding: 4px 0 8px; }
 
     /* PDF Text */
-    .preview-text-page { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+    .preview-text-page { padding: 20px 24px; border-bottom: 1px solid var(--border); content-visibility: auto; contain-intrinsic-size: auto 200px; }
     .preview-text-header { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
     .preview-text-content { font-size: 14px; line-height: 1.7; color: var(--text); white-space: pre-wrap; font-family: var(--serif); }
 
@@ -300,14 +320,14 @@
     <a href="/" style="text-decoration:none; color:var(--text2); font-size:13px; display:flex; align-items:center; gap:4px; margin-right:12px;" title="返回首页">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
     </a>
-    <a href="/" class="logo" style="text-decoration:none; display:flex; align-items:center; gap:8px;">
+    <span class="logo" style="display:flex; align-items:center; gap:8px;">
       <svg class="logo-icon" viewBox="0 0 32 32" fill="none" style="width:30px;height:30px;flex-shrink:0;">
         <circle cx="17" cy="15" r="8" stroke="currentColor" stroke-width="2"/>
         <rect x="3" y="5" width="12" height="17" rx="2" stroke="currentColor" stroke-width="2" fill="var(--bg)"/>
         <path d="M8 10h4M8 14h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       EbookTranslator
-    </a>
+    </span>
     <button class="btn btn-primary" id="btn-open-book" onclick="openFilePicker()" data-i18n="openBook"></button>
     <a href="/guide" class="icon-btn" title="User Guide" style="text-decoration:none;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
@@ -330,6 +350,20 @@
       <div class="upload-zone" id="upload-zone">
         <input type="file" accept=".epub,.docx,.pdf" onchange="handleFile(this.files[0])">
         <p><strong data-i18n="dropHere"></strong><br><span data-i18n="orBrowse"></span></p>
+        <div class="upload-progress" id="upload-progress" style="display:none;">
+          <div class="up-header">
+            <svg class="up-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span class="up-filename" id="up-filename"></span>
+          </div>
+          <div class="up-track"><div class="up-fill" id="up-fill"></div></div>
+          <div class="up-meta">
+            <span id="up-loaded">0 KB</span>
+            <span id="up-pct">0%</span>
+            <span id="up-total">0 KB</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -367,11 +401,10 @@
             <option value="native">普通排版</option>
           </select>
         </div>
+        <div class="scanned-badge" id="scanned-badge" data-i18n="scannedBadge"></div>
         <div class="book-actions">
           <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()" data-i18n="startBtn"></button>
-          <button class="btn btn-ghost preview-toggle" id="btn-preview" onclick="togglePreview()" style="display:none;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            Preview
+          <button class="btn btn-ghost preview-toggle" id="btn-preview" onclick="togglePreview()" style="display:none;" data-i18n="preview">
           </button>
         </div>
       </div>
@@ -447,6 +480,15 @@
           <option value="chinese_only" data-i18n="modeChineseOnly"></option>
         </select>
       </div>
+      <!-- OCR Section -->
+      <div class="settings-divider"><span data-i18n="ocrSection"></span></div>
+      <div class="field">
+        <label data-i18n="ocrEnabled"></label>
+        <select id="cfg-ocr-enabled">
+          <option value="true">On</option>
+          <option value="false">Off</option>
+        </select>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeSettings()" data-i18n="cancel"></button>
@@ -470,6 +512,7 @@ const i18n = {
     welcomeDesc: '支持 EPUB、Word、PDF 文档<br>拖放到这里一键翻译为任意语言。',
     dropHere: '将文件拖放到这里',
     orBrowse: '或点击选择文件',
+    preview: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> 预览',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始翻译',
     targetLang: '目标语言：',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止',
@@ -504,6 +547,14 @@ const i18n = {
     currentKey: '当前：',
     encrypted: 'API Key 已加密存储',
     apiKeyWarning: '请先输入 API Key 才能使用翻译功能',
+    scannedBadge: '📄 扫描版 — 将使用 AI 识别文字后翻译',
+    uploading: '上传中...',
+    uploadTimeout: '上传超时',
+    ocrSection: 'OCR 设置（扫描 PDF）',
+    ocrEnabled: '启用 OCR',
+    ocrApiKeyLabel: 'OCR API Key',
+    ocrApiBaseLabel: 'OCR API 地址',
+    ocrModelLabel: 'OCR 模型',
     disclaimer: '本工具仅供个人学习和研究使用。翻译结果由 AI 模型生成，可能存在不准确之处，仅供参考。上传的文件将在翻译完成后自动删除，请勿上传涉及版权争议的内容。使用本工具即表示您接受以上条款。',
   },
   en: {
@@ -512,6 +563,7 @@ const i18n = {
     welcomeDesc: 'Supports EPUB, Word and PDF documents.<br>Drop a file here to translate into any language.',
     dropHere: 'Drop your file here',
     orBrowse: 'or click to browse',
+    preview: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation',
     targetLang: 'Target: ',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop',
@@ -547,6 +599,14 @@ const i18n = {
     encrypted: 'API Key is encrypted',
     apiKeyWarning: 'Please enter your API Key to use the translation feature',
     disclaimer: 'This tool is for personal learning and research purposes only. Translation results are generated by AI models and may contain inaccuracies. Uploaded files are automatically deleted after translation. By using this tool, you agree to these terms.',
+    uploading: 'Uploading...',
+    uploadTimeout: 'Upload timeout',
+    scannedBadge: '📄 Scanned — AI OCR will extract text before translation',
+    ocrSection: 'OCR Settings (Scanned PDF)',
+    ocrEnabled: 'Enable OCR',
+    ocrApiKeyLabel: 'OCR API Key',
+    ocrApiBaseLabel: 'OCR API Base URL',
+    ocrModelLabel: 'OCR Model',
   }
 };
 
@@ -630,6 +690,8 @@ function openSettings() {
     badge.style.display = (c.api_key_set && c.api_key_encrypted) ? 'inline-block' : 'none';
     const warning = document.getElementById('api-key-warning');
     warning.style.display = c.api_key_set ? 'none' : 'flex';
+    // OCR settings
+    document.getElementById('cfg-ocr-enabled').value = c.ocr_enabled ? 'true' : 'false';
     document.getElementById('settings-modal').classList.add('active');
   });
 }
@@ -643,6 +705,8 @@ function saveSettings() {
   const b = { api_base: document.getElementById('cfg-base').value, model: document.getElementById('cfg-model').value, translation_mode: document.getElementById('cfg-mode').value };
   const k = document.getElementById('cfg-key').value.trim();
   if (k) b.api_key = k;
+  // OCR settings
+  b.ocr_enabled = document.getElementById('cfg-ocr-enabled').value === 'true';
   const btn = document.getElementById('btn-save'); btn.textContent=t('saving'); btn.disabled=true;
   fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
     .then(r=>r.json()).then((resp)=>{
@@ -665,6 +729,36 @@ if (uz) {
   uz.addEventListener('drop', ev => { const f=ev.dataTransfer.files[0]; if(f) handleFile(f); });
 }
 
+function showUploadProgress(file) {
+  const up = document.getElementById('upload-progress');
+  uz.classList.add('uploading');
+  up.style.display = '';
+  document.getElementById('up-filename').textContent = file.name;
+  document.getElementById('up-fill').style.width = '0%';
+  document.getElementById('up-pct').textContent = '0%';
+  document.getElementById('up-loaded').textContent = '0 KB';
+  document.getElementById('up-total').textContent = fmtSize(file.size);
+}
+
+function updateUploadProgress(loaded, total) {
+  const pct = Math.round(loaded / total * 100);
+  document.getElementById('up-fill').style.width = pct + '%';
+  document.getElementById('up-pct').textContent = pct + '%';
+  document.getElementById('up-loaded').textContent = fmtSize(loaded);
+}
+
+function hideUploadProgress() {
+  uz.classList.remove('uploading');
+  document.getElementById('upload-progress').style.display = 'none';
+}
+
+function autoOpenPreview() {
+  const previewBtn = document.getElementById('btn-preview');
+  if (previewBtn.style.display !== 'none' && !previewOpen) {
+    togglePreview();
+  }
+}
+
 function handleFile(file) {
   if (!file) return;
   const ext = file.name.toLowerCase().split('.').pop();
@@ -677,15 +771,55 @@ function handleFile(file) {
   panel.dataset.loaded = '';
   previewOpen = false;
   document.getElementById('btn-preview').classList.remove('active');
+  document.getElementById('scanned-badge').classList.remove('show');
 
+  // Restore welcome view so upload progress is visible
+  document.getElementById('welcome-view').style.display = '';
+  document.getElementById('book-view').classList.remove('active');
+
+  // Show upload progress
+  showUploadProgress(file);
+
+  // Use XMLHttpRequest for upload progress tracking
   const form = new FormData(); form.append('file', file);
-  toast(t('loadBook'),'');
-  fetch('/api/upload',{method:'POST',body:form}).then(r=>r.json()).then(data => {
-    if (data.detail) { toast(data.detail,'error'); return; }
-    taskId = data.task_id;
-    showBook(data, file.size);
-    toast(t('bookLoaded'),'');
-  }).catch(e => toast(t('uploadFail')+e.message,'error'));
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable) updateUploadProgress(e.loaded, e.total);
+  });
+
+  xhr.addEventListener('load', () => {
+    hideUploadProgress();
+    if (xhr.status === 200) {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (data.detail) { toast(data.detail,'error'); return; }
+        taskId = data.task_id;
+        showBook(data, file.size);
+        toast(t('bookLoaded'),'');
+      } catch (e) { toast(t('uploadFail')+e.message,'error'); }
+    } else {
+      let errMsg = t('uploadFail');
+      try { const e = JSON.parse(xhr.responseText); errMsg += e.detail || xhr.statusText; }
+      catch (_) { errMsg += xhr.statusText || 'Server error'; }
+      toast(errMsg, 'error');
+    }
+  });
+
+  xhr.addEventListener('error', () => {
+    hideUploadProgress();
+    toast(t('uploadFail') + 'Network error', 'error');
+  });
+
+  xhr.timeout = 120000;
+  xhr.addEventListener('timeout', () => {
+    hideUploadProgress();
+    xhr.abort();
+    toast(t('uploadFail') + t('uploadTimeout'), 'error');
+  });
+
+  xhr.send(form);
 }
 
 function showBook(data, fileSize) {
@@ -704,6 +838,14 @@ function showBook(data, fileSize) {
   currentFileType = isPdf ? '.pdf' : (isEpub ? '.epub' : (isDocx ? '.docx' : null));
   epubToc = data.toc || [];
   epubCover = data.cover || null;
+
+  // Show scanned badge if applicable
+  const scannedBadge = document.getElementById('scanned-badge');
+  if (data.is_scanned) {
+    scannedBadge.classList.add('show');
+  } else {
+    scannedBadge.classList.remove('show');
+  }
 
   // Show/hide preview button
   const previewBtn = document.getElementById('btn-preview');
@@ -761,21 +903,29 @@ function toggleTranslation() {
   } else if (status === 'translating' || status === 'loading' || status === 'queued') {
     fetch(`/api/stop/${taskId}`,{method:'POST'}).then(()=>{});
     btn.innerHTML = 'Stopping...'; btn.disabled = true;
+    // Fallback: force enable after 5s if SSE hasn't received 'stopped' yet
+    const fallbackId = 'stop-fallback-' + taskId;
+    clearTimeout(window[fallbackId]);
+    window[fallbackId] = setTimeout(() => {
+      if (btn.dataset.status !== '') { showStartButton(); }
+      clearInterval(timerInterval);
+      if (eventSource) eventSource.close();
+    }, 5000);
   }
 }
 function showStopButton() {
   const btn = document.getElementById('btn-action'); btn.dataset.status = 'translating';
-  btn.innerHTML = t('stopBtn');
+  btn.innerHTML = t('stopBtn'); btn.disabled = false;
   btn.classList.remove('btn-primary','btn-download'); btn.classList.add('btn-danger');
 }
 function showStartButton() {
   const btn = document.getElementById('btn-action'); btn.dataset.status = '';
-  btn.innerHTML = t('startBtn');
+  btn.innerHTML = t('startBtn'); btn.disabled = false;
   btn.classList.remove('btn-danger','btn-download'); btn.classList.add('btn-primary'); btn.onclick = toggleTranslation;
 }
 function showDownloadButton() {
   const btn = document.getElementById('btn-action'); btn.dataset.status = 'done';
-  btn.innerHTML = t('downloadBtn');
+  btn.innerHTML = t('downloadBtn'); btn.disabled = false;
   btn.classList.remove('btn-danger','btn-primary'); btn.classList.add('btn-download');
   btn.onclick = () => { window.location = `/api/download/${taskId}`; };
 }
@@ -816,7 +966,7 @@ function finishProgress(d) {
   showDownloadButton(); toast(t('transComplete'),'success');
 }
 function errorProgress(d) { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Error: '+(d.error||'Unknown'); showStartButton(); toast(d.error||t('transFailed'),'error'); }
-function stoppedProgress() { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = t('stopped'); showStartButton(); toast(t('transStopped'),''); }
+function stoppedProgress() { clearInterval(timerInterval); eventSource.close(); clearTimeout(window['stop-fallback-'+taskId]); document.getElementById('progress-label').textContent = t('stopped'); showStartButton(); toast(t('transStopped'),''); }
 
 // ── Helpers ───────────────────────────────────────────────────────
 function toast(msg, type) { const el = document.getElementById('toast'); el.textContent = msg; el.className = 'toast'+(type==='success'?' toast-success':'')+(type==='error'?' toast-error':''); setTimeout(()=>el.classList.add('show'),10); setTimeout(()=>el.classList.remove('show'),3000); }
@@ -981,7 +1131,7 @@ registerPreviewer('.pdf', new (function() {
     for (let i = 0; i < pageCount; i++) {
       html += `
         <div class="preview-page-wrap" data-page="${i}">
-          <img class="preview-page-img" data-src="/api/book/${taskId}/pdf-page?page=${i}&scale=1.5" alt="Page ${i + 1}" loading="lazy">
+          <img class="preview-page-img" data-src="/api/book/${taskId}/pdf-page?page=${i}&scale=1.0" alt="Page ${i + 1}" loading="lazy">
           <div class="preview-page-label">Page ${i + 1} / ${pageCount}</div>
         </div>`;
     }
@@ -1072,7 +1222,14 @@ registerPreviewer('.docx', new (function() {
 
     fetch(`/api/book/${taskId}/docx-content`)
       .then(r => { if (!r.ok) throw new Error('Failed to load DOCX content'); return r.json(); })
-      .then(data => { contentEl.innerHTML = data.html; })
+      .then(data => {
+        contentEl.innerHTML = data.html;
+        // Apply virtual scrolling to top-level blocks
+        contentEl.querySelectorAll('.preview-reader > *').forEach(el => {
+          el.style.contentVisibility = 'auto';
+          el.style.containIntrinsicSize = 'auto 80px';
+        });
+      })
       .catch(err => { contentEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);">${escapeHtml(err.message)}</div>`; });
   };
 })());
