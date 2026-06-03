@@ -48,7 +48,7 @@ def _is_translatable(text):
     stripped = text.strip()
     if not stripped or len(stripped) < 2:
         return False
-    if not re.search(r'[a-zA-Z]', stripped):
+    if not any(c.isalpha() for c in stripped):
         return False
     if _is_code_like(stripped):
         return False

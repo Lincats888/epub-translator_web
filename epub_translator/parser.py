@@ -209,7 +209,10 @@ def _is_translatable(text: str) -> bool:
     stripped = text.strip()
     if not stripped:
         return False
-    if not re.search(r"[a-zA-Z]", stripped):
+    if len(stripped) < 2:
+        return False
+    # Must contain at least one letter character (any script: Latin, CJK, etc.)
+    if not any(c.isalpha() for c in stripped):
         return False
     return True
 

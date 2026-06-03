@@ -60,11 +60,12 @@ def cmd_translate(args):
 
     # 5. Translate file by file
     print(f"[4/5] Translating {len(content_files)} documents...")
-    translator = Translator(config)
+    target_lang = "zh-CN"  # default for CLI; override via --target if needed
+    is_bilingual = config.translation_mode == "bilingual"
+    translator = Translator(config, target_lang, is_bilingual)
     total_translated = 0
     total_cached = 0
     overall_start = time.time()
-    is_bilingual = config.translation_mode == "bilingual"
 
     def _print_progress(label, current, total, elapsed):
         """Print a single-line progress bar that overwrites itself."""

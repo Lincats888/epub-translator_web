@@ -9,34 +9,14 @@ from .config import Config
 
 logger = logging.getLogger(__name__)
 
-BILINGUAL_SYSTEM_PROMPT = """You are a professional translator. Translate the following English text into Simplified Chinese.
-For each text segment separated by the delimiter '|||', return only the Chinese translation.
-
-Important rules:
-1. Preserve all HTML tags and entities exactly as they appear
-2. Do not translate proper nouns that should stay in English (brand names, URLs, code)
-3. Preserve numbers, dates, and punctuation structure
-4. Return each translation segment separated by '|||' in the same order
-5. Do not add any extra commentary or explanation
-6. For source code: keep all code and syntax completely unchanged, translate ONLY the comments within the code"""
-
-CHINESE_ONLY_SYSTEM_PROMPT = """You are a professional translator. Translate the following English text into Simplified Chinese.
-For each text segment separated by the delimiter '|||', return only the Chinese translation.
-
-Important rules:
-1. Preserve all HTML tags and entities exactly as they appear
-2. Do not translate proper nouns that should stay in English (brand names, URLs, code)
-3. Preserve numbers, dates, and punctuation structure
-4. Return each translation segment separated by '|||' in the same order
-5. Do not add any extra commentary or explanation
-6. For source code: keep all code and syntax completely unchanged, translate ONLY the comments within the code"""
-
 TRANSLATION_DELIMITER = "|||"
 
 
 class Translator:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, target_lang: str = "zh-CN", bilingual: bool = True):
         self._config = config
+        self._target_lang = target_lang
+        self._bilingual = bilingual
         self._client = OpenAI(
             api_key=config.api_key,
             base_url=config.api_base,
@@ -45,9 +25,8 @@ class Translator:
         )
 
     def _get_system_prompt(self) -> str:
-        if self._config.translation_mode == "bilingual":
-            return BILINGUAL_SYSTEM_PROMPT
-        return CHINESE_ONLY_SYSTEM_PROMPT
+        from languages.prompts import get_system_prompt
+        return get_system_prompt(self._target_lang, self._bilingual)
 
     def translate_batch(self, texts: list[str]) -> list[str]:
         """Translate a batch of text strings. Returns translations in the same order."""

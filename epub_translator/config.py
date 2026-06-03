@@ -57,11 +57,13 @@ class Config:
 
     @property
     def api_base(self) -> str:
-        return self._data.get("api_base", "https://api.deepseek.com")
+        val = self._data.get("api_base", "")
+        return val if val else "https://api.deepseek.com"
 
     @property
     def model(self) -> str:
-        return self._data.get("model", "deepseek-chat")
+        val = self._data.get("model", "")
+        return val if val else "deepseek-chat"
 
     @property
     def translation_mode(self) -> str:

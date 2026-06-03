@@ -44,9 +44,11 @@ class TestTranslator:
             )
         ]
 
-        with patch.object(Translator, "__init__", lambda self, c: None):
+        with patch.object(Translator, "__init__", lambda self, c, target_lang="zh-CN", bilingual=True: None):
             translator = Translator.__new__(Translator)
             translator._config = config_chinese_only
+            translator._target_lang = "zh-CN"
+            translator._bilingual = True
             translator._client = Mock()
             translator._client.chat.completions.create.return_value = mock_response
 
@@ -59,7 +61,7 @@ class TestTranslator:
             assert results[2] == "测试"
 
     def test_translate_empty_batch(self, config_chinese_only):
-        with patch.object(Translator, "__init__", lambda self, c: None):
+        with patch.object(Translator, "__init__", lambda self, c, target_lang="zh-CN", bilingual=True: None):
             translator = Translator.__new__(Translator)
             translator._config = config_chinese_only
             assert translator.translate_batch([]) == []
@@ -70,9 +72,11 @@ class TestTranslator:
             MagicMock(message=MagicMock(content="你好"))
         ]
 
-        with patch.object(Translator, "__init__", lambda self, c: None):
+        with patch.object(Translator, "__init__", lambda self, c, target_lang="zh-CN", bilingual=True: None):
             translator = Translator.__new__(Translator)
             translator._config = config_chinese_only
+            translator._target_lang = "zh-CN"
+            translator._bilingual = True
             translator._client = Mock()
             translator._client.chat.completions.create.side_effect = [
                 Exception("Network error"),
@@ -85,15 +89,20 @@ class TestTranslator:
             assert translator._client.chat.completions.create.call_count == 2
 
     def test_chinese_only_prompt(self, config_chinese_only):
-        with patch.object(Translator, "__init__", lambda self, c: None):
+        with patch.object(Translator, "__init__", lambda self, c, target_lang="zh-CN", bilingual=False: None):
             translator = Translator.__new__(Translator)
             translator._config = config_chinese_only
+            translator._target_lang = "zh-CN"
+            translator._bilingual = False
             prompt = translator._get_system_prompt()
-            assert "only the chinese translation" in prompt.lower()
+            assert "Simplified Chinese" in prompt
 
     def test_bilingual_prompt(self, config_bilingual):
-        with patch.object(Translator, "__init__", lambda self, c: None):
+        with patch.object(Translator, "__init__", lambda self, c, target_lang="zh-CN", bilingual=True: None):
             translator = Translator.__new__(Translator)
             translator._config = config_bilingual
+            translator._target_lang = "zh-CN"
+            translator._bilingual = True
             prompt = translator._get_system_prompt()
-            assert "simplified chinese" in prompt.lower()
+            assert "Simplified Chinese" in prompt
+            assert "bilingual" in prompt.lower()

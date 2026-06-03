@@ -178,18 +178,42 @@ def _read_epub_meta(epub_path: str) -> dict:
         if ncx_href:
             try:
                 ncx = ET.fromstring(zf.read(_zip_path(ncx_href)))
-                for nav in ncx.findall(".//ncx:navPoint", NS):
-                    label = nav.find(".//ncx:text", NS)
-                    content = nav.find(".//ncx:content", NS)
-                    if label is not None and label.text and content is not None:
-                        result["toc"].append({
-                            "title": label.text.strip(),
-                            "href": content.get("src", ""),
-                        })
+                def _parse_ncx(navpoint, depth=0):
+                    items = []
+                    label = navpoint.find(".//ncx:text", NS)
+                    content = navpoint.find("ncx:content", NS)
+                    href = content.get("src", "") if content is not None else ""
+                    # Strip anchor fragments
+                    href = href.split("#")[0]
+                    title = label.text.strip() if label is not None and label.text else ""
+                    items.append({
+                        "title": title,
+                        "href": href,
+                        "depth": depth,
+                    })
+                    for child in navpoint.findall("ncx:navPoint", NS):
+                        items.extend(_parse_ncx(child, depth + 1))
+                    return items
+                nav_map = ncx.find(".//ncx:navMap", NS)
+                if nav_map is not None:
+                    for nav in nav_map.findall("ncx:navPoint", NS):
+                        result["toc"].extend(_parse_ncx(nav, 0))
             except Exception:
                 pass
 
         # 5. TOC — nav.xhtml (EPUB3)
+        def _parse_nav_ol(ol, depth=0):
+            items = []
+            for li in ol.find_all("li", recursive=False):
+                a = li.find("a", href=True)
+                title = a.get_text(strip=True) if a is not None else ""
+                href = a["href"].split("#")[0] if a is not None and a.get("href") else ""
+                items.append({"title": title, "href": href, "depth": depth})
+                child_ol = li.find("ol")
+                if child_ol:
+                    items.extend(_parse_nav_ol(child_ol, depth + 1))
+            return items
+
         if not result["toc"]:
             for item in manifest.values():
                 if "nav" in item.get("properties", ""):
@@ -198,13 +222,11 @@ def _read_epub_meta(epub_path: str) -> dict:
                         try:
                             nav_html = zf.read(_zip_path(nav_href)).decode("utf-8", errors="replace")
                             soup = BeautifulSoup(nav_html, "lxml")
-                            for a in soup.find_all("a", href=True):
-                                title = a.get_text(strip=True)
-                                if title:
-                                    result["toc"].append({
-                                        "title": title,
-                                        "href": a["href"].split("#")[0],
-                                    })
+                            nav_el = soup.find("nav")
+                            if nav_el:
+                                ol = nav_el.find("ol")
+                                if ol:
+                                    result["toc"] = _parse_nav_ol(ol, 0)
                         except Exception:
                             pass
                     break
@@ -214,13 +236,15 @@ def _read_epub_meta(epub_path: str) -> dict:
             for ref in opf.findall(".//opf:spine/opf:itemref", NS):
                 href = manifest.get(ref.get("idref", ""), ET.Element("x")).get("href", "")
                 if href and href.endswith((".html", ".xhtml", ".htm")):
-                    result["toc"].append({"title": href, "href": href})
+                    # Use filename without extension as fallback title
+                    title = os.path.splitext(os.path.basename(href))[0]
+                    result["toc"].append({"title": title, "href": href, "depth": 0})
 
     return result
 
 
 def _read_epub_content(epub_path: str, opf_dir: str, href: str) -> str:
-    """Read a chapter's HTML content from EPUB."""
+    """Read a chapter's HTML content from EPUB, inlining images as base64 data URIs."""
     full_path = os.path.join(opf_dir, href).replace("\\", "/")
     with zipfile.ZipFile(epub_path, "r") as zf:
         try:
@@ -228,17 +252,45 @@ def _read_epub_content(epub_path: str, opf_dir: str, href: str) -> str:
         except KeyError:
             return "<p>Content not found.</p>"
 
-    # Extract body content
-    soup = BeautifulSoup(html, "lxml")
-    body = soup.find("body")
-    if body:
-        return str(body)
-    return html
+        # Extract body content
+        soup = BeautifulSoup(html, "lxml")
+
+        # Strip links so they don't cause navigation errors in preview
+        for a in soup.find_all("a", href=True):
+            del a["href"]
+
+        # Inline images as data URIs so they display in the preview
+        chapter_dir = os.path.dirname(href).replace("\\", "/")
+        for img in soup.find_all("img"):
+            src = img.get("src", "")
+            if not src or src.startswith(("http://", "https://", "data:")):
+                continue
+            # Resolve relative path against chapter location (normalize ..)
+            if src.startswith("/"):
+                img_rel_path = src.lstrip("/")
+            else:
+                img_rel_path = os.path.normpath(os.path.join(chapter_dir, src)).replace("\\", "/")
+            img_zip_path = os.path.join(opf_dir, img_rel_path).replace("\\", "/")
+            try:
+                img_data = zf.read(img_zip_path)
+                ext = os.path.splitext(src)[1].lower()
+                mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                            ".gif": "image/gif", ".svg": "image/svg+xml", ".webp": "image/webp"}
+                mime = mime_map.get(ext, "image/png")
+                b64 = base64.b64encode(img_data).decode()
+                img["src"] = f"data:{mime};base64,{b64}"
+            except (KeyError, FileNotFoundError):
+                pass  # Leave broken link as-is
+
+        body = soup.find("body")
+        if body:
+            return str(body)
+        return html
 
 
 # ── Translation Runner ────────────────────────────────────────────────
 
-def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN"):
+def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN", bilingual: bool = True):
     """Background EPUB translation — mirrors main.py cmd_translate logic."""
     try:
         _update(task_id, status="loading", step="Loading configuration...")
@@ -269,10 +321,10 @@ def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN"):
             return
 
         total_files = len(content_files)
-        translator_obj = Translator(config)
+        translator_obj = Translator(config, target_lang, bilingual)
         total_translated = 0
         total_cached = 0
-        is_bilingual = config.translation_mode == "bilingual"
+        is_bilingual = bilingual
 
         _update(task_id, status="translating", step="Translating...",
                 current_file=0, total_files=total_files,
@@ -448,7 +500,7 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
 
         # Translate concurrently for speed
         total = len(fragments)
-        translator_obj = Translator(config)
+        translator_obj = Translator(config, target_lang, bilingual)
 
         _update(task_id, status="translating", step="Translating...",
                 current_file=0, total_files=1,
@@ -605,12 +657,172 @@ async def book_content(task_id: str, path: str = Query(...)):
     task = _tasks.get(task_id)
     if not task:
         raise HTTPException(404, "Task not found")
-    epub_path = task.get("epub_path")
+    epub_path = task.get("file_path")
     if not epub_path or not os.path.exists(epub_path):
         raise HTTPException(404, "EPUB file not found")
     opf_dir = task.get("opf_dir", "OEBPS/")
     html = _read_epub_content(epub_path, opf_dir, path)
     return {"html": html}
+
+
+@app.get("/api/book/{task_id}/pdf-info")
+async def pdf_info(task_id: str):
+    """Return PDF metadata: page count, title, file size."""
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+    ext = task.get("file_type", "")
+    if ext != ".pdf":
+        raise HTTPException(400, "Not a PDF file")
+
+    import fitz
+    try:
+        doc = fitz.open(file_path)
+        page_count = len(doc)
+        meta = doc.metadata or {}
+        doc.close()
+    except Exception as e:
+        raise HTTPException(500, f"Failed to read PDF: {e}")
+
+    return {
+        "page_count": page_count,
+        "title": meta.get("title", task.get("filename", "")),
+        "file_size": os.path.getsize(file_path),
+    }
+
+
+@app.get("/api/book/{task_id}/pdf-page")
+async def pdf_page(task_id: str, page: int = Query(..., ge=0), scale: float = Query(1.5, ge=0.5, le=4.0)):
+    """Render a single PDF page as a PNG image."""
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+
+    import fitz
+    try:
+        doc = fitz.open(file_path)
+        if page < 0 or page >= len(doc):
+            doc.close()
+            raise HTTPException(404, f"Page {page} out of range (0-{len(doc)-1})")
+        p = doc[page]
+        mat = fitz.Matrix(scale, scale)
+        pix = p.get_pixmap(matrix=mat)
+        img_bytes = pix.tobytes("png")
+        doc.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to render page: {e}")
+
+    return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png",
+                             headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/api/book/{task_id}/pdf-text")
+async def pdf_text(task_id: str, page: int = Query(..., ge=0)):
+    """Extract text from a single PDF page."""
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+
+    import fitz
+    try:
+        doc = fitz.open(file_path)
+        if page < 0 or page >= len(doc):
+            doc.close()
+            raise HTTPException(404, f"Page {page} out of range (0-{len(doc)-1})")
+        p = doc[page]
+        text = p.get_text()
+        doc.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to extract text: {e}")
+
+    return {"page": page, "text": text}
+
+
+@app.get("/api/book/{task_id}/docx-content")
+async def docx_content(task_id: str):
+    """Read DOCX content and return as simple HTML for preview."""
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+    if task.get("file_type") != ".docx":
+        raise HTTPException(400, "Not a DOCX file")
+
+    try:
+        import docx
+        doc = docx.Document(file_path)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to read DOCX: {e}")
+
+    html_parts = ['<div class="docx-preview">']
+
+    # Collect paragraphs
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if not text:
+            html_parts.append('<p style="margin-bottom:0.5em;">&nbsp;</p>')
+            continue
+        style_name = para.style.name if para.style else "Normal"
+
+        # Determine tag and styling
+        if style_name.startswith("Heading 1"):
+            tag = "h1"
+        elif style_name.startswith("Heading 2"):
+            tag = "h2"
+        elif style_name.startswith("Heading 3"):
+            tag = "h3"
+        elif style_name.startswith("Heading"):
+            tag = "h4"
+        else:
+            tag = "p"
+
+        # Build HTML with run-level formatting
+        inner = ""
+        for run in para.runs:
+            t = run.text
+            if not t:
+                continue
+            if run.bold:
+                t = f"<strong>{t}</strong>"
+            if run.italic:
+                t = f"<em>{t}</em>"
+            if run.underline:
+                t = f"<u>{t}</u>"
+            inner += t
+
+        if not inner:
+            inner = text
+
+        html_parts.append(f"<{tag} style='margin-bottom:0.5em;'>{inner}</{tag}>")
+
+    # Collect tables
+    for ti, table in enumerate(doc.tables):
+        html_parts.append(f'<table style="border-collapse:collapse;width:100%;margin:1em 0;">')
+        for ri, row in enumerate(table.rows):
+            html_parts.append("<tr>")
+            for ci, cell in enumerate(row.cells):
+                tag = "th" if ri == 0 else "td"
+                html_parts.append(f'<{tag} style="border:1px solid #ccc;padding:6px 10px;text-align:left;vertical-align:top;">{cell.text}</{tag}>')
+            html_parts.append("</tr>")
+        html_parts.append("</table>")
+
+    html_parts.append("</div>")
+    return {"html": "\n".join(html_parts), "title": task.get("filename", "")}
 
 
 @app.post("/api/start/{task_id}")
@@ -627,18 +839,18 @@ async def start_translation(task_id: str, body: dict = None):
     # Get target language and mode from request body
     target_lang = "zh-CN"
     bilingual = True
-    pdf_method = "pdf2zh"  # PDF always uses pdf2zh engine
+    pdf_method = "babeldoc"  # default PDF engine
     if body:
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
-    print(f"[DEBUG] pdf_method={pdf_method} file_type={task.get('file_type')} bilingual={bilingual}")
+        pdf_method = body.get("pdf_method", pdf_method)
 
     _update(task_id, status="queued", step="Starting...", stopped=False,
             target_lang=target_lang, bilingual=bilingual)
 
     file_type = task.get("file_type", ".epub")
     if file_type == ".epub":
-        _executor.submit(_run_translate, task_id, file_path, target_lang)
+        _executor.submit(_run_translate, task_id, file_path, target_lang, bilingual)
     else:
         _executor.submit(_run_translate_generic, task_id, file_path,
                          target_lang, bilingual, pdf_method)
