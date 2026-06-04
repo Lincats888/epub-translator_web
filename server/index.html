@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EbookTranslator — 为每一本书找到它的读者</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.loli.net">
   <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -45,6 +46,31 @@
     .dropdown-menu .dm-desc { font-size: 11px; color: var(--text2); display: block; }
     .dropdown-menu .dm-divider { height: 1px; background: var(--border); margin: 4px 0; }
     .lang-switch { display: none; }  /* replaced by globe icon */
+
+    /* ── Settings Modal (left-right layout) ── */
+    .settings-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; }
+    .settings-overlay.active { display: flex; }
+    .settings-dialog { background: var(--card); border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0,0,0,0.15); width: 100%; max-width: 620px; margin: 16px; overflow: hidden; display: flex; flex-direction: column; max-height: 80vh; }
+    .settings-header { padding: 20px 24px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+    .settings-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 600; flex: 1; }
+    .settings-close { width: 32px; height: 32px; border: none; background: none; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text2); }
+    .settings-close:hover { background: var(--accent-light); }
+    .settings-body { display: flex; flex: 1; overflow: hidden; }
+    .settings-sidebar { width: 140px; border-right: 1px solid var(--border); padding: 8px; flex-shrink: 0; background: var(--bg); }
+    .settings-nav-item { padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text2); transition: all 0.15s; margin-bottom: 2px; font-weight: 500; }
+    .settings-nav-item:hover { background: var(--accent-light); color: var(--text); }
+    .settings-nav-item.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+    .settings-content { flex: 1; padding: 20px 24px; overflow-y: auto; }
+    .settings-section { display: none; }
+    .settings-section.active { display: block; }
+    .settings-field { margin-bottom: 14px; }
+    .settings-field label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--text2); }
+    .settings-field input, .settings-field select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--sans); font-size: 13px; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.2s; }
+    .settings-field input:focus, .settings-field select:focus { border-color: var(--accent); }
+    .settings-badge { display: none; margin-left: 8px; font-size: 10px; font-weight: 600; color: #5DAA7E; background: #E8F5EE; padding: 2px 8px; border-radius: 6px; }
+    .settings-warn { padding: 10px 14px; margin-bottom: 14px; background: #FDECEC; border: 1px solid #F5C6C6; border-radius: 8px; font-size: 12px; color: #B83232; display: none; align-items: center; gap: 6px; }
+    .settings-warn.show { display: flex; }
+    .settings-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
     /* ── Globe Language Popup ── */
     .lang-popup { position: relative; }
@@ -119,51 +145,20 @@
     </a>
     <div class="nav-spacer"></div>
 
-    <!-- Dropdown: Features -->
+    <!-- Dropdown: Translation -->
     <div class="nav-dropdown" id="dd-features">
       <span onclick="toggleDropdown('dd-features')">
-        <span data-i18n="menuFeatures">功能</span>
+        <span data-i18n="menuTranslate">翻译</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </span>
       <div class="dropdown-menu">
-        <a href="/translate">
-          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/></svg></span>
-          <span><span class="dm-label" data-i18n="menuPdf">PDF 翻译</span><span class="dm-desc" data-i18n="menuPdfDesc">三引擎可选，精准保留排版</span></span>
-        </a>
         <a href="/translate">
           <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></span>
-          <span><span class="dm-label" data-i18n="menuEpub">EPUB 翻译</span><span class="dm-desc" data-i18n="menuEpubDesc">保留目录、链接、内联格式</span></span>
+          <span><span class="dm-label" data-i18n="menuEbook">电子书翻译</span><span class="dm-desc" data-i18n="menuEbookDesc">EPUB · DOCX · 文字 PDF · 三引擎</span></span>
         </a>
-        <a href="/translate">
-          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg></span>
-          <span><span class="dm-label" data-i18n="menuDocx">DOCX 翻译</span><span class="dm-desc" data-i18n="menuDocxDesc">保留段落、表格与格式</span></span>
-        </a>
-        <div class="dm-divider"></div>
-        <a href="/translate">
-          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/></svg></span>
-          <span><span class="dm-label" data-i18n="menuBilingual">双语对照</span><span class="dm-desc" data-i18n="menuBilingualDesc">原文与译文并排显示</span></span>
-        </a>
-      </div>
-    </div>
-
-    <!-- Dropdown: Engines -->
-    <div class="nav-dropdown" id="dd-engines">
-      <span onclick="toggleDropdown('dd-engines')">
-        <span data-i18n="menuEngines">引擎</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </span>
-      <div class="dropdown-menu">
-        <a href="#engines">
+        <a href="/ocrtranslate">
           <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
-          <span><span class="dm-label">BabelDOC</span><span class="dm-desc" data-i18n="menuBabeldocDesc">IL 中间表示 · 排版最优</span></span>
-        </a>
-        <a href="#engines">
-          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
-          <span><span class="dm-label">PDFMathTranslate</span><span class="dm-desc" data-i18n="menuPdf2zhDesc">内容流解析 · 速度兼顾</span></span>
-        </a>
-        <a href="#engines">
-          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
-          <span><span class="dm-label" data-i18n="menuNativeDesc">原生引擎</span><span class="dm-desc" data-i18n="menuNativeLong">PyMuPDF · 轻量快速</span></span>
+          <span><span class="dm-label" data-i18n="menuOcr">OCR 翻译</span><span class="dm-desc" data-i18n="menuOcrDesc">扫描版 PDF · AI 识别 + 覆写</span></span>
         </a>
       </div>
     </div>
@@ -207,13 +202,17 @@
         </div>
       </div>
     </div>
+    <!-- Settings -->
+    <span class="lang-icon" onclick="openSettings()" title="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </span>
   </div>
 </nav>
 
 <!-- Hero -->
 <section class="hero">
   <h1 data-i18n="heroTitle">让每一本书，<br>被世界读懂。</h1>
-  <p data-i18n="heroDesc">三引擎精准翻译 · 保留原始排版 · 支持 EPUB、DOCX、PDF<br>用 AI 的力量跨越语言的鸿沟</p>
+  <p data-i18n="heroDesc">电子书翻译 + OCR 翻译双模式 · 保留原始排版<br>用 AI 的力量跨越语言的鸿沟</p>
   <a href="/translate" class="cta">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
     <span data-i18n="ctaBtn">开始翻译</span>
@@ -226,55 +225,142 @@
     <h2 class="section-title" data-i18n="formatsTitle">支持的格式</h2>
     <p class="section-sub" data-i18n="formatsSub">无论你的文档是什么格式，都能精准翻译</p>
     <div class="features">
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      <a href="/translate" style="text-decoration:none; color:inherit; display:block;">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+          </div>
+          <h3 data-i18n="ebookTrans">电子书翻译</h3>
+          <p data-i18n="ebookTransDesc">支持 EPUB、DOCX、文字型 PDF。三引擎可选，精准保留原始排版、目录、表格与内联格式</p>
         </div>
-        <h3>EPUB</h3>
-        <p data-i18n="epubDesc">保留目录、内联格式、图片和链接。双语/纯中文可选，自动添加 lang 属性</p>
+      </a>
+      <a href="/ocrtranslate" style="text-decoration:none; color:inherit; display:block;">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <h3 data-i18n="ocrTrans">OCR 翻译</h3>
+          <p data-i18n="ocrTransDesc">专为扫描版 PDF 设计。AI 识别文字 → 清除原文 → 覆写译文，完美替换不叠层</p>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works -->
+<section>
+  <div class="section-inner">
+    <h2 class="section-title" data-i18n="howItWorksTitle">如何使用</h2>
+    <p class="section-sub" data-i18n="howItWorksSub">简单三步，完成翻译</p>
+    <div class="features">
+      <div class="feature-card" style="text-align:center;">
+        <div style="font-family:var(--serif);font-size:36px;font-weight:700;color:var(--accent);margin-bottom:8px;">1</div>
+        <h3 data-i18n="step1Title">上传文件</h3>
+        <p data-i18n="step1Desc">拖放或点击选择 EPUB、DOCX 或 PDF 文件</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-        </div>
-        <h3>PDF</h3>
-        <p data-i18n="pdfDesc">三引擎可选：BabelDOC IL 重建、PDFMathTranslate 内容流解析、原生精确写回</p>
+      <div class="feature-card" style="text-align:center;">
+        <div style="font-family:var(--serif);font-size:36px;font-weight:700;color:var(--accent);margin-bottom:8px;">2</div>
+        <h3 data-i18n="step2Title">选择设置</h3>
+        <p data-i18n="step2Desc">选择目标语言、翻译模式，文字型 PDF 可选翻译引擎</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-        </div>
-        <h3>DOCX</h3>
-        <p data-i18n="docxDesc">保留段落、表格、加粗斜体和字号颜色，双语模式下在原文下方插入译文</p>
+      <div class="feature-card" style="text-align:center;">
+        <div style="font-family:var(--serif);font-size:36px;font-weight:700;color:var(--accent);margin-bottom:8px;">3</div>
+        <h3 data-i18n="step3Title">下载译文</h3>
+        <p data-i18n="step3Desc">一键下载翻译完成的文件，保留原始排版</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Engines -->
-<section>
-  <div class="section-inner">
-    <h2 class="section-title" data-i18n="enginesTitle">三翻译引擎</h2>
-    <p class="section-sub" data-i18n="enginesSub">针对不同需求，选择最优引擎</p>
-    <div class="engine-list">
-      <div class="engine-item">
-        <span class="badge" data-i18n="engineDefault">默认推荐</span>
-        <h4>BabelDOC</h4>
-        <p data-i18n="engineBabeldoc">中间表示 + 文档树重建<br>排版最精准</p>
+<!-- Settings Modal (left-right layout) -->
+<div class="settings-overlay" id="settings-overlay">
+  <div class="settings-dialog">
+    <div class="settings-header">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <h3 data-i18n="settingsTitle">设置</h3>
+      <button class="settings-close" onclick="closeSettings()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-sidebar">
+        <div class="settings-nav-item active" data-section="translate" onclick="switchSettingsSection('translate')">
+          <span data-i18n="settingsNavTranslate">翻译 API</span>
+        </div>
+        <div class="settings-nav-item" data-section="ocr" onclick="switchSettingsSection('ocr')">
+          <span data-i18n="settingsNavOcr">OCR 设置</span>
+        </div>
       </div>
-      <div class="engine-item">
-        <span class="badge" data-i18n="engineFast">高性能</span>
-        <h4>PDFMathTranslate</h4>
-        <p data-i18n="enginePdf2zh">pdfminer 内容流解析<br>速度与质量兼顾</p>
-      </div>
-      <div class="engine-item">
-        <span class="badge" data-i18n="engineLight">轻量</span>
-        <h4>原生引擎</h4>
-        <p data-i18n="engineNative">PyMuPDF exact bbox<br>快速完成翻译</p>
+      <div class="settings-content">
+        <!-- Translate Section -->
+        <div class="settings-section active" id="sec-translate">
+          <div class="settings-warn" id="api-key-warning">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span data-i18n="apiKeyWarning">请先输入 API Key</span>
+          </div>
+          <div class="settings-field">
+            <label>
+              <span data-i18n="apiKeyLabel">API Key</span>
+              <span class="settings-badge" id="cfg-encrypted-badge">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px; margin-right:2px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                <span data-i18n="encrypted">已加密</span>
+              </span>
+            </label>
+            <input id="cfg-key" type="password" placeholder="sk-xxxxxxxxxxxx" oninput="checkApiKeyInput()">
+            <div style="font-size:11px; color:var(--text2); margin-top:2px;" id="cfg-key-hint"></div>
+          </div>
+          <div class="settings-field">
+            <label data-i18n="apiBaseLabel">API 地址</label>
+            <input id="cfg-base" type="text" placeholder="https://api.deepseek.com">
+          </div>
+          <div class="settings-field">
+            <label data-i18n="modelLabel">模型</label>
+            <input id="cfg-model" type="text" placeholder="deepseek-chat">
+          </div>
+          <div class="settings-field">
+            <label data-i18n="modeLabel">翻译模式</label>
+            <select id="cfg-mode">
+              <option value="bilingual" data-i18n="modeBilingual">双语（原文 + 译文）</option>
+              <option value="chinese_only" data-i18n="modeChineseOnly">目标语言（只保留译文）</option>
+            </select>
+          </div>
+        </div>
+        <!-- OCR Section -->
+        <div class="settings-section" id="sec-ocr">
+          <div class="settings-field">
+            <label data-i18n="ocrEnabled">启用 OCR</label>
+            <select id="cfg-ocr-enabled">
+              <option value="true">On</option>
+              <option value="false">Off</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label>
+              <span data-i18n="ocrApiKeyLabel">OCR API Key</span>
+              <span class="settings-badge" id="cfg-ocr-encrypted-badge">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px; margin-right:2px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                <span data-i18n="encrypted">已加密</span>
+              </span>
+            </label>
+            <input id="cfg-ocr-key" type="password" placeholder="sk-xxxxxxxxxxxx">
+          </div>
+          <div class="settings-field">
+            <label data-i18n="ocrApiBaseLabel">OCR API 地址</label>
+            <input id="cfg-ocr-base" type="text" placeholder="https://api.siliconflow.com">
+          </div>
+          <div class="settings-field">
+            <label data-i18n="ocrModelLabel">OCR 模型</label>
+            <input id="cfg-ocr-model" type="text" placeholder="Qwen/Qwen3-VL-32B-Instruct">
+          </div>
+        </div>
       </div>
     </div>
+    <div class="settings-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()" data-i18n="cancel" style="font-size:13px; padding:8px 18px;">取消</button>
+      <button class="btn btn-primary" onclick="saveSettings()" data-i18n="save" style="font-size:13px; padding:8px 18px;">保存</button>
+    </div>
   </div>
-</section>
+</div>
 
 <!-- Footer -->
 <footer>
@@ -286,55 +372,61 @@
 const i18n = {
   zh: {
     navGuide: '使用指南', navLogin: '登录', navStart: '开始翻译',
-    menuFeatures: '功能', menuEngines: '引擎', menuResources: '资源',
-    menuPdf: 'PDF 翻译', menuPdfDesc: '三引擎可选，精准保留排版',
-    menuEpub: 'EPUB 翻译', menuEpubDesc: '保留目录、链接、内联格式',
-    menuDocx: 'DOCX 翻译', menuDocxDesc: '保留段落、表格与格式',
-    menuBilingual: '双语对照', menuBilingualDesc: '原文与译文并排显示',
-    menuBabeldocDesc: 'IL 中间表示 · 排版最优',
-    menuPdf2zhDesc: '内容流解析 · 速度兼顾',
-    menuNativeDesc: '原生引擎', menuNativeLong: 'PyMuPDF · 轻量快速',
+    menuTranslate: '翻译', menuResources: '资源',
+    menuEbook: '电子书翻译', menuEbookDesc: 'EPUB · DOCX · 文字 PDF · 三引擎',
+    menuOcr: 'OCR 翻译', menuOcrDesc: '扫描版 PDF · AI 识别 + 覆写',
     menuGuide: '使用指南', menuGuideDesc: '快速上手指南',
     menuGithubDesc: '开源代码仓库',
     heroTitle: '让每一本书，<br>被世界读懂。',
-    heroDesc: '三引擎精准翻译 · 保留原始排版 · 支持 EPUB、DOCX、PDF<br>用 AI 的力量跨越语言的鸿沟',
+    heroDesc: '电子书翻译 + OCR 翻译双模式 · 保留原始排版<br>用 AI 的力量跨越语言的鸿沟',
     ctaBtn: '开始翻译',
-    formatsTitle: '支持的格式', formatsSub: '无论你的文档是什么格式，都能精准翻译',
-    epubDesc: '保留目录、内联格式、图片和链接。双语/纯中文可选，自动添加 lang 属性',
-    pdfDesc: '三引擎可选：BabelDOC IL 重建、PDFMathTranslate 内容流解析、原生精确写回',
-    docxDesc: '保留段落、表格、加粗斜体和字号颜色，双语模式下在原文下方插入译文',
-    enginesTitle: '三翻译引擎', enginesSub: '针对不同需求，选择最优引擎',
-    engineDefault: '默认推荐', engineFast: '高性能', engineLight: '轻量',
-    engineBabeldoc: '中间表示 + 文档树重建<br>排版最精准',
-    enginePdf2zh: 'pdfminer 内容流解析<br>速度与质量兼顾',
-    engineNative: 'PyMuPDF exact bbox<br>快速完成翻译',
-    footer: '© 2026 老丁 · 本工具仅供个人学习研究使用'
+    formatsTitle: '翻译模式', formatsSub: '选择适合你文档的翻译方式',
+    ebookTrans: '电子书翻译',
+    ebookTransDesc: '支持 EPUB、DOCX、文字型 PDF。三引擎可选，精准保留原始排版、目录、表格与内联格式',
+    ocrTrans: 'OCR 翻译',
+    ocrTransDesc: '专为扫描版 PDF 设计。AI 识别文字 → 清除原文 → 覆写译文，完美替换不叠层',
+    howItWorksTitle: '如何使用', howItWorksSub: '简单三步，完成翻译',
+    step1Title: '上传文件', step1Desc: '拖放或点击选择 EPUB、DOCX 或 PDF 文件',
+    step2Title: '选择设置', step2Desc: '选择目标语言、翻译模式，文字型 PDF 可选翻译引擎',
+    step3Title: '下载译文', step3Desc: '一键下载翻译完成的文件，保留原始排版',
+    footer: '© 2026 老丁 · 本工具仅供个人学习研究使用',
+    settingsTitle: '设置',
+    settingsNavTranslate: '翻译 API',
+    settingsNavOcr: 'OCR 设置',
+    apiKeyLabel: 'API Key', apiBaseLabel: 'API 地址', modelLabel: '模型', modeLabel: '翻译模式',
+    modeBilingual: '双语（原文 + 译文）', modeChineseOnly: '目标语言（只保留译文）',
+    ocrEnabled: '启用 OCR', ocrApiKeyLabel: 'OCR API Key', ocrApiBaseLabel: 'OCR API 地址', ocrModelLabel: 'OCR 模型',
+    encrypted: '已加密存储', apiKeyWarning: '请先输入 API Key 才能使用翻译功能',
+    cancel: '取消', save: '保存'
   },
   en: {
     navGuide: 'Guide', navLogin: 'Login', navStart: 'Start',
-    menuFeatures: 'Features', menuEngines: 'Engines', menuResources: 'Resources',
-    menuPdf: 'PDF Translation', menuPdfDesc: 'Three engines, layout-preserving',
-    menuEpub: 'EPUB Translation', menuEpubDesc: 'Preserves TOC, links, inline formatting',
-    menuDocx: 'DOCX Translation', menuDocxDesc: 'Preserves paragraphs, tables, formatting',
-    menuBilingual: 'Bilingual Mode', menuBilingualDesc: 'Side-by-side original & translation',
-    menuBabeldocDesc: 'IL pipeline · Best layout',
-    menuPdf2zhDesc: 'Content stream parsing · Fast & quality',
-    menuNativeDesc: 'Native Engine', menuNativeLong: 'PyMuPDF · Lightweight & fast',
+    menuTranslate: 'Translate', menuResources: 'Resources',
+    menuEbook: 'E-book Translation', menuEbookDesc: 'EPUB · DOCX · Text PDF · 3 Engines',
+    menuOcr: 'OCR Translation', menuOcrDesc: 'Scanned PDF · AI Recognition + Overlay',
     menuGuide: 'User Guide', menuGuideDesc: 'Quick start guide',
     menuGithubDesc: 'Open source repository',
     heroTitle: 'Let every book<br>be read by the world.',
-    heroDesc: 'Three engines for precise translation · Preserve original layout<br>Supports EPUB, DOCX, PDF. Bridge language gaps with AI.',
+    heroDesc: 'E-book + OCR dual translation modes · Preserve original layout<br>Bridge language gaps with AI.',
     ctaBtn: 'Start Translating',
-    formatsTitle: 'Supported Formats', formatsSub: 'Precise translation for any document format',
-    epubDesc: 'Preserves TOC, inline formatting, images and links. Bilingual or Chinese-only, with automatic lang attributes.',
-    pdfDesc: 'Three engines: BabelDOC IL rebuild, PDFMathTranslate content stream parsing, Native exact bbox.',
-    docxDesc: 'Preserves paragraphs, tables, bold/italic, font sizes and colors. Inserts translation below original in bilingual mode.',
-    enginesTitle: 'Three Translation Engines', enginesSub: 'Choose the best engine for your needs',
-    engineDefault: 'Recommended', engineFast: 'High Performance', engineLight: 'Lightweight',
-    engineBabeldoc: 'IR + document tree rebuild<br>Best layout fidelity',
-    enginePdf2zh: 'pdfminer content stream parsing<br>Speed and quality balanced',
-    engineNative: 'PyMuPDF exact bbox<br>Fast and simple',
-    footer: '© 2026 Lao Ding · For personal learning and research use only'
+    formatsTitle: 'Translation Modes', formatsSub: 'Choose the right approach for your document',
+    ebookTrans: 'E-book Translation',
+    ebookTransDesc: 'Supports EPUB, DOCX, text PDF. Three engines for precise layout, TOC, table and inline format preservation.',
+    ocrTrans: 'OCR Translation',
+    ocrTransDesc: 'Designed for scanned PDFs. AI text recognition → erase original → overlay translation. Clean replacement without overlapping.',
+    howItWorksTitle: 'How It Works', howItWorksSub: 'Three simple steps',
+    step1Title: 'Upload File', step1Desc: 'Drag & drop or click to select EPUB, DOCX or PDF',
+    step2Title: 'Choose Settings', step2Desc: 'Select target language, translation mode, and PDF engine',
+    step3Title: 'Download', step3Desc: 'One-click download of translated file with original layout preserved',
+    footer: '© 2026 Lao Ding · For personal learning and research use only',
+    settingsTitle: 'Settings',
+    settingsNavTranslate: 'Translation API',
+    settingsNavOcr: 'OCR Settings',
+    apiKeyLabel: 'API Key', apiBaseLabel: 'API Base URL', modelLabel: 'Model', modeLabel: 'Mode',
+    modeBilingual: 'Bilingual (Original + Translation)', modeChineseOnly: 'Target Language Only',
+    ocrEnabled: 'Enable OCR', ocrApiKeyLabel: 'OCR API Key', ocrApiBaseLabel: 'OCR API URL', ocrModelLabel: 'OCR Model',
+    encrypted: 'Encrypted', apiKeyWarning: 'Please enter your API Key to use translation',
+    cancel: 'Cancel', save: 'Save'
   }
 };
 
@@ -398,6 +490,77 @@ document.addEventListener('click', e => {
 window.addEventListener('scroll', () => {
   document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 10);
 });
+
+// ── Settings ─────────────────────────────────────────────────────
+function switchSettingsSection(name) {
+  document.querySelectorAll('.settings-nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.section === name);
+  });
+  document.querySelectorAll('.settings-section').forEach(el => {
+    el.classList.toggle('active', el.id === 'sec-' + name);
+  });
+}
+
+function openSettings() {
+  fetch('/api/config').then(r => r.json()).then(c => {
+    document.getElementById('cfg-key').value = '';
+    document.getElementById('cfg-base').value = c.api_base || '';
+    document.getElementById('cfg-model').value = c.model || '';
+    document.getElementById('cfg-mode').value = c.translation_mode || 'bilingual';
+    document.getElementById('cfg-key-hint').innerHTML = c.api_key_set
+      ? '当前：' + c.api_key_masked
+      : '未配置 — <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent);text-decoration:underline;">申请 API Key</a>';
+    const badge = document.getElementById('cfg-encrypted-badge');
+    badge.style.display = (c.api_key_set && c.api_key_encrypted) ? 'inline-block' : 'none';
+    const warn = document.getElementById('api-key-warning');
+    warn.classList.toggle('show', !c.api_key_set);
+    // OCR
+    document.getElementById('cfg-ocr-enabled').value = c.ocr_enabled ? 'true' : 'false';
+    document.getElementById('cfg-ocr-key').value = '';
+    document.getElementById('cfg-ocr-base').value = c.ocr_api_base || '';
+    document.getElementById('cfg-ocr-model').value = c.ocr_model || '';
+    const ocrBadge = document.getElementById('cfg-ocr-encrypted-badge');
+    ocrBadge.style.display = (c.ocr_api_key_set && c.ocr_api_key_encrypted) ? 'inline-block' : 'none';
+    document.getElementById('settings-overlay').classList.add('active');
+  }).catch(() => {});
+}
+
+function checkApiKeyInput() {
+  const val = document.getElementById('cfg-key').value.trim();
+  document.getElementById('api-key-warning').classList.toggle('show', !val);
+}
+
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('active');
+}
+
+function saveSettings() {
+  const body = {
+    api_base: document.getElementById('cfg-base').value,
+    model: document.getElementById('cfg-model').value,
+    translation_mode: document.getElementById('cfg-mode').value,
+    ocr_enabled: document.getElementById('cfg-ocr-enabled').value === 'true',
+    ocr_api_base: document.getElementById('cfg-ocr-base').value,
+    ocr_model: document.getElementById('cfg-ocr-model').value,
+  };
+  const k = document.getElementById('cfg-key').value.trim();
+  if (k) body.api_key = k;
+  const ocrK = document.getElementById('cfg-ocr-key').value.trim();
+  if (ocrK) body.ocr_api_key = ocrK;
+  const btn = document.querySelector('.settings-footer .btn-primary');
+  btn.textContent = 'Saving...'; btn.disabled = true;
+  fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then(r => r.json()).then(() => {
+      btn.textContent = 'Saved!';
+      setTimeout(() => { closeSettings(); btn.textContent = lang === 'zh' ? '保存' : 'Save'; btn.disabled = false; }, 500);
+    })
+    .catch(e => { btn.textContent = lang === 'zh' ? '保存' : 'Save'; btn.disabled = false; });
+}
+
+// Auto-open settings if URL has ?settings=open
+if (window.location.search.includes('settings=open')) {
+  setTimeout(openSettings, 300);
+}
 </script>
 </body>
 </html>

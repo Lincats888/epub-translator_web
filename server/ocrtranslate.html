@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EbookTranslator</title>
+  <title>OCR 翻译 — EbookTranslator</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.loli.net">
   <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -71,6 +71,9 @@
     .book-actions { margin-top: 24px; display: flex; gap: 10px; }
     .scanned-badge { display: none; margin-top: 12px; padding: 8px 14px; background: #FFF3E0; border: 1px solid #FFB74D; border-radius: 8px; font-size: 13px; color: #E65100; align-items: center; gap: 6px; }
     .scanned-badge.show { display: inline-flex; }
+    .text-pdf-warn { display: none; margin-top: 12px; padding: 10px 14px; background: #E3F2FD; border: 1px solid #64B5F6; border-radius: 8px; font-size: 13px; color: #1565C0; align-items: center; gap: 8px; line-height:1.6; }
+    .text-pdf-warn.show { display: flex; }
+    .text-pdf-warn a { color: #1565C0; font-weight: 600; }
 
     /* Progress */
     .progress-bar-wrap { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: var(--card); border-top: 1px solid var(--border); padding: 16px 24px; transform: translateY(100%); transition: transform 0.3s; }
@@ -310,7 +313,7 @@
         <rect x="3" y="5" width="12" height="17" rx="2" stroke="currentColor" stroke-width="2" fill="var(--bg)"/>
         <path d="M8 10h4M8 14h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      EbookTranslator
+      EbookTranslator <span style="font-size:14px; font-weight:400; color:var(--text2);">OCR 翻译</span>
     </span>
     <button class="btn btn-primary" id="btn-open-book" onclick="openFilePicker()" data-i18n="openBook"></button>
     <a href="/guide" class="icon-btn" title="User Guide" style="text-decoration:none;">
@@ -321,7 +324,7 @@
     </a>
   </header>
 
-  <input type="file" id="file-input" accept=".epub,.docx,.pdf" style="display:none" onchange="handleFile(this.files[0])">
+  <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="handleFile(this.files[0])">
 
   <!-- Welcome -->
   <div class="welcome" id="welcome-view">
@@ -332,7 +335,7 @@
       <h2 data-i18n="welcomeTitle"></h2>
       <p data-i18n="welcomeDesc"></p>
       <div class="upload-zone" id="upload-zone">
-        <input type="file" accept=".epub,.docx,.pdf" onchange="handleFile(this.files[0])">
+        <input type="file" accept=".pdf" onchange="handleFile(this.files[0])">
         <p><strong data-i18n="dropHere"></strong><br><span data-i18n="orBrowse"></span></p>
         <div class="upload-progress" id="upload-progress" style="display:none;">
           <div class="up-header">
@@ -379,13 +382,12 @@
             <option value="bilingual">双语</option>
             <option value="target_only">目标语言</option>
           </select>
-          <select id="trans-engine" style="display:none; padding:6px 12px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none; cursor:pointer;">
-            <option value="babeldoc" selected>精确图文排版</option>
-            <option value="pdf2zh">数学公式排版</option>
-            <option value="native">普通排版</option>
-          </select>
         </div>
         <div class="scanned-badge" id="scanned-badge" data-i18n="scannedBadge"></div>
+        <div class="text-pdf-warn" id="text-pdf-warn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span data-i18n="textPdfWarn"></span>
+        </div>
         <div class="book-actions">
           <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()" data-i18n="startBtn"></button>
           <button class="btn btn-ghost preview-toggle" id="btn-preview" onclick="togglePreview()" style="display:none;" data-i18n="preview">
@@ -433,25 +435,25 @@ let lang = localStorage.getItem('epub-lang') || 'zh';
 
 const i18n = {
   zh: {
-    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> 打开文件',
-    welcomeTitle: '翻译你的电子书',
-    welcomeDesc: '支持 EPUB、Word、PDF 文档<br>拖放到这里一键翻译为任意语言。',
-    dropHere: '将文件拖放到这里',
-    orBrowse: '或点击选择文件',
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> 打开 PDF',
+    welcomeTitle: 'OCR 扫描版 PDF 翻译',
+    welcomeDesc: '专为扫描版 PDF 设计<br>AI 识别文字 → 清除原文 → 覆写译文，完美替换不叠层',
+    dropHere: '将 PDF 文件拖放到这里',
+    orBrowse: '或点击选择 PDF 文件',
     preview: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> 预览',
-    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始翻译',
+    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始 OCR 翻译',
     targetLang: '目标语言：',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止',
     downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载',
-    translating: '翻译中...',
+    translating: 'OCR 翻译中...',
     files: '个文件',
-    fragments: '个片段',
+    fragments: '个文字块',
     done: '翻译完成！',
     stopped: '已停止',
     loadBook: '加载中...',
-    bookLoaded: '书籍已加载',
+    bookLoaded: 'PDF 已加载',
     uploadFail: '上传失败：',
-    selectFile: '请选择 .epub、.docx 或 .pdf 文件',
+    selectFile: '请选择 .pdf 文件',
     startFail: '启动失败：',
     fileTooLarge: '文件过大（最大 100 MB）',
     transComplete: '翻译完成！',
@@ -462,31 +464,33 @@ const i18n = {
     currentKey: '当前：',
     encrypted: 'API Key 已加密存储',
     apiKeyWarning: '请先输入 API Key 才能使用翻译功能',
-    scannedBadge: '📄 扫描版 — 将使用 AI 识别文字后翻译',
+    scannedBadge: '📄 扫描版 — AI 将识别文字 → 清除原文 → 覆写译文',
+    detectFailed: '⚠️ 未检测到扫描版特征。请确认上传的是扫描版 PDF（纯图片型），文字型 PDF 请使用 <a href="/translate">电子书翻译</a>。',
+    textPdfWarn: '此 PDF 为文字型文档，建议使用 <a href="/translate">电子书翻译</a> 获得更好的排版效果。OCR 翻译专为扫描版（图片型）PDF 设计。',
     uploading: '上传中...',
     uploadTimeout: '上传超时',
-    disclaimer: '本工具仅供个人学习和研究使用。翻译结果由 AI 模型生成，可能存在不准确之处，仅供参考。上传的文件将在翻译完成后自动删除，请勿上传涉及版权争议的内容。使用本工具即表示您接受以上条款。',
+    disclaimer: '本工具仅供个人学习和研究使用。OCR 识别 + AI 翻译结果可能存在不准确之处，仅供参考。上传的文件将在翻译完成后自动删除。使用本工具即表示您接受以上条款。',
   },
   en: {
-    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Open File',
-    welcomeTitle: 'Translate Your Documents',
-    welcomeDesc: 'Supports EPUB, Word and PDF documents.<br>Drop a file here to translate into any language.',
-    dropHere: 'Drop your file here',
-    orBrowse: 'or click to browse',
+    openBook: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Open PDF',
+    welcomeTitle: 'OCR Scanned PDF Translation',
+    welcomeDesc: 'Designed for scanned PDFs.<br>AI text recognition → erase original → overlay translation. Clean replacement, no overlap.',
+    dropHere: 'Drop your PDF here',
+    orBrowse: 'or click to browse PDF',
     preview: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview',
-    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation',
+    startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start OCR Translation',
     targetLang: 'Target: ',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop',
     downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download',
-    translating: 'Translating...',
+    translating: 'OCR Translating...',
     files: 'files',
-    fragments: 'fragments',
+    fragments: 'text blocks',
     done: 'Translation complete!',
     stopped: 'Stopped',
     loadBook: 'Loading...',
-    bookLoaded: 'Book loaded',
+    bookLoaded: 'PDF loaded',
     uploadFail: 'Upload failed: ',
-    selectFile: 'Please select an .epub, .docx or .pdf file',
+    selectFile: 'Please select a .pdf file',
     startFail: 'Failed to start: ',
     fileTooLarge: 'File too large (max 100 MB)',
     transComplete: 'Translation complete!',
@@ -497,10 +501,17 @@ const i18n = {
     currentKey: 'Current: ',
     encrypted: 'API Key is encrypted',
     apiKeyWarning: 'Please enter your API Key to use the translation feature',
-    disclaimer: 'This tool is for personal learning and research purposes only. Translation results are generated by AI models and may contain inaccuracies. Uploaded files are automatically deleted after translation. By using this tool, you agree to these terms.',
+    disclaimer: 'This tool is for personal learning and research purposes only. OCR + AI translation results may contain inaccuracies. Uploaded files are automatically deleted after translation. By using this tool, you agree to these terms.',
     uploading: 'Uploading...',
     uploadTimeout: 'Upload timeout',
-    scannedBadge: '📄 Scanned — AI OCR will extract text before translation',
+    scannedBadge: '📄 Scanned — AI OCR will extract, erase, then overlay translation',
+    detectFailed: '⚠️ Scanned PDF characteristics not detected. Please ensure this is an image-based (scanned) PDF. For text-based PDF, use <a href="/translate">E-book Translation</a>.',
+    textPdfWarn: 'This is a text-based PDF. For better layout, use <a href="/translate">E-book Translation</a> instead. OCR Translation is designed for scanned (image-based) PDFs.',
+    ocrSection: 'OCR Settings',
+    ocrEnabled: 'Enable OCR',
+    ocrApiKeyLabel: 'OCR API Key',
+    ocrApiBaseLabel: 'OCR API Base URL',
+    ocrModelLabel: 'OCR Model',
   }
 };
 
@@ -509,8 +520,6 @@ function t(key) { return i18n[lang][key] || key; }
 function setLang(l) {
   lang = l;
   localStorage.setItem('epub-lang', l);
-  document.getElementById('lang-zh').classList.toggle('active', l === 'zh');
-  document.getElementById('lang-en').classList.toggle('active', l === 'en');
   document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
   applyLang();
   loadLanguages();
@@ -612,7 +621,7 @@ function autoOpenPreview() {
 function handleFile(file) {
   if (!file) return;
   const ext = file.name.toLowerCase().split('.').pop();
-  if (!['epub','docx','pdf'].includes(ext)) { toast(t('selectFile'),'error'); return; }
+  if (ext !== 'pdf') { toast(t('selectFile'),'error'); return; }
   if (file.size > 100*1024*1024) { toast(t('fileTooLarge'),'error'); return; }
 
   // Reset preview
@@ -677,33 +686,28 @@ function showBook(data, fileSize) {
   document.getElementById('book-view').classList.add('active');
   document.getElementById('book-title').textContent = data.title || data.filename;
   document.getElementById('book-author').textContent = data.author || '';
-  const isPdf = data.filename && data.filename.toLowerCase().endsWith('.pdf');
-  const isEpub = data.filename && data.filename.toLowerCase().endsWith('.epub');
-  const isDocx = data.filename && data.filename.toLowerCase().endsWith('.docx');
-  document.getElementById('trans-engine').style.display = isPdf ? '' : 'none';
   document.getElementById('book-size').innerHTML = '<strong>' + fmtSize(fileSize) + '</strong>';
   document.getElementById('book-date').innerHTML = '<strong>' + new Date().toLocaleDateString() + '</strong>';
 
-  // Store preview data
-  currentFileType = isPdf ? '.pdf' : (isEpub ? '.epub' : (isDocx ? '.docx' : null));
-  epubToc = data.toc || [];
-  epubCover = data.cover || null;
+  // OCR page always deals with PDF
+  currentFileType = '.pdf';
+  epubToc = [];
+  epubCover = null;
 
-  // Show scanned badge if applicable
+  // Check if this is a scanned PDF or text PDF
   const scannedBadge = document.getElementById('scanned-badge');
+  const textPdfWarn = document.getElementById('text-pdf-warn');
   if (data.is_scanned) {
     scannedBadge.classList.add('show');
+    textPdfWarn.classList.remove('show');
   } else {
     scannedBadge.classList.remove('show');
+    textPdfWarn.classList.add('show');
   }
 
-  // Show/hide preview button
+  // Show preview button for PDF
   const previewBtn = document.getElementById('btn-preview');
-  if (currentFileType === '.epub' || currentFileType === '.pdf' || currentFileType === '.docx') {
-    previewBtn.style.display = 'inline-flex';
-  } else {
-    previewBtn.style.display = 'none';
-  }
+  previewBtn.style.display = 'inline-flex';
 
   // Reset preview panel
   const panel = document.getElementById('preview-panel');
@@ -715,7 +719,7 @@ function showBook(data, fileSize) {
   showStartButton();
   if (!apiKeyReady) {
     document.getElementById('btn-action').disabled = true;
-    // checkConfig() runs at page load and handles redirect if needed
+    openSettings();
   }
 }
 
@@ -727,7 +731,7 @@ function fmtSize(b) {
 
 // ── Translation ───────────────────────────────────────────────────
 function toggleTranslation() {
-  if (!apiKeyReady) { window.location.href='/?settings=open'; return; }
+  if (!apiKeyReady) { openSettings(); return; }
   const btn = document.getElementById('btn-action');
   const status = btn.dataset.status;
   if (!status || status === 'done' || status === 'error' || status === 'stopped') {
@@ -737,22 +741,14 @@ function toggleTranslation() {
     if (previewOpen) togglePreview();
     const targetLang = document.getElementById('target-lang').value;
     const transMode = document.getElementById('trans-mode').value;
-    const engine = document.getElementById('trans-engine').value;
-    const isBabeldoc = (engine === 'babeldoc');
-    const apiRoute = isBabeldoc ? `/api/start_babeldoc/${taskId}` : `/api/start/${taskId}`;
-    const bodyData = isBabeldoc
-      ? JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual', ui_lang: lang})
-      : JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual', pdf_method: engine});
-    fetch(apiRoute,{
+    // Always use OCR endpoint
+    fetch(`/api/start_ocr/${taskId}`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: bodyData
-    }).then(r => {
-      if (!r.ok) return r.json().then(err => { throw new Error(err.detail || 'Server error'); });
-      return r.json();
-    }).then(() => {
+      body: JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual'})
+    }).then(r=>r.json()).then(() => {
       btn.disabled = false; showStopButton(); startProgress();
-    }).catch(e => { btn.disabled = false; showStartButton(); toast(e.message,'error'); });
+    }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });
   } else if (status === 'translating' || status === 'loading' || status === 'queued') {
     fetch(`/api/stop/${taskId}`,{method:'POST'}).then(()=>{});
     btn.innerHTML = 'Stopping...'; btn.disabled = true;
@@ -798,8 +794,14 @@ function startProgress() {
       const pct = total > 0 ? Math.round(done / total * 100) : 0;
       document.getElementById('progress-fill').style.width = pct + '%';
       document.getElementById('progress-pct').textContent = pct + '%';
+      // Show step text as the main label
       document.getElementById('progress-label').textContent = d.step || t('translating');
-      document.getElementById('progress-files').innerHTML = `${done} / ${total}`;
+      // Show page-level detail
+      if (done && total) {
+        document.getElementById('progress-files').innerHTML = `${done} / ${total}`;
+      } else {
+        document.getElementById('progress-files').textContent = '';
+      }
       showStopButton();
     } else if (d.status === 'done') { finishProgress(d); }
     else if (d.status === 'error') { errorProgress(d); }
@@ -843,125 +845,6 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
-
-// ── EPUB Previewer ──────────────────────────────────────────────────
-registerPreviewer('.epub', new (function() {
-  let currentChapter = -1;
-
-  this.openCover = function() {
-    currentChapter = -1;
-    document.querySelectorAll('.epub-toc-item').forEach(el => el.classList.remove('active'));
-    const first = document.querySelector('.epub-toc-item');
-    if (first) first.classList.add('active');
-    document.getElementById('epub-title').textContent = 'Cover';
-    document.getElementById('epub-content').innerHTML =
-      `<div class="preview-reader" style="display:flex;align-items:center;justify-content:center;min-height:400px;"><div class="preview-cover"><img src="${epubCover}" alt="Cover"></div></div>`;
-    document.getElementById('epub-prev').disabled = true;
-    document.getElementById('epub-next').disabled = epubToc.length === 0;
-    closeSidebar();
-  };
-
-  this.openChapter = function(index) {
-    if (index < 0 || index >= epubToc.length) return;
-    const ch = epubToc[index];
-    if (!ch.href) return;
-
-    currentChapter = index;
-    document.querySelectorAll('.epub-toc-item').forEach(el => el.classList.remove('active'));
-    const item = document.querySelector(`.epub-toc-item[data-index="${index}"]`);
-    if (item) item.classList.add('active');
-
-    document.getElementById('epub-title').textContent = ch.title || `Chapter ${index + 1}`;
-    const epubContent = document.getElementById('epub-content');
-    epubContent.innerHTML = '<div class="preview-reader preview-reader-loading">Loading chapter...</div>';
-
-    fetch(`/api/book/${taskId}/content?path=${encodeURIComponent(ch.href)}`)
-      .then(r => { if (!r.ok) throw new Error('Failed to load'); return r.json(); })
-      .then(data => { epubContent.innerHTML = `<div class="preview-reader">${data.html}</div>`; })
-      .catch(() => {
-        ch.href = '';
-        const el = document.querySelector(`.epub-toc-item[data-index="${index}"]`);
-        if (el) { el.classList.remove('active'); el.classList.add('disabled'); el.removeAttribute('onclick'); }
-        epubContent.innerHTML = '<div class="preview-reader" style="text-align:center;padding:48px;color:var(--text2);font-size:13px;">Content not available</div>';
-        this.navChapter(1);
-      });
-
-    let prevIdx = index - 1;
-    while (prevIdx >= 0 && !epubToc[prevIdx].href) prevIdx--;
-    let nextIdx = index + 1;
-    while (nextIdx < epubToc.length && !epubToc[nextIdx].href) nextIdx++;
-    document.getElementById('epub-prev').disabled = prevIdx < 0;
-    document.getElementById('epub-next').disabled = nextIdx >= epubToc.length;
-    closeSidebar();
-  };
-
-  this.navChapter = function(dir) {
-    let next = currentChapter + dir;
-    if (dir < 0 && currentChapter === -1 && epubCover) { this.openCover(); return; }
-    if (next < -1 || next >= epubToc.length) return;
-    if (next === -1 && epubCover) { this.openCover(); return; }
-    while (next >= 0 && next < epubToc.length && !epubToc[next].href) next += dir;
-    if (next < 0 || next >= epubToc.length) return;
-    this.openChapter(next);
-  };
-
-  this.load = function(tabsEl, contentEl) {
-    tabsEl.innerHTML = '';
-    currentChapter = -1;
-    const hasCover = !!epubCover;
-    const hasToc = epubToc.length > 0;
-    if (!hasCover && !hasToc) {
-      contentEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text2);">No content to preview</div>';
-      return;
-    }
-
-    let sidebarHtml = '';
-    if (hasCover) {
-      sidebarHtml += `<div class="epub-toc-item${!hasToc ? ' active' : ''}" onclick="getPreviewer('.epub').openCover()">📖 Cover</div>`;
-    }
-    if (hasToc) {
-      epubToc.forEach((ch, i) => {
-        const hasLink = !!ch.href;
-        const padLeft = 16 + (ch.depth || 0) * 18;
-        const cls = 'epub-toc-item' + (hasLink ? '' : ' disabled');
-        sidebarHtml += `<div class="${cls}" onclick="${hasLink ? `getPreviewer('.epub').openChapter(${i})` : ''}" data-index="${i}" style="padding-left:${padLeft}px">${escapeHtml(ch.title || '(untitled)')}</div>`;
-      });
-    }
-
-    contentEl.innerHTML = `
-      <div class="epub-reader">
-        <div class="epub-nav">
-          <button class="epub-nav-btn" id="epub-prev" onclick="getPreviewer('.epub').navChapter(-1)" disabled>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg> Prev
-          </button>
-          <button class="epub-nav-toggle" id="epub-menu-toggle" onclick="toggleSidebar()">☰</button>
-          <span class="epub-nav-title" id="epub-title">${hasCover ? 'Cover' : (hasToc ? escapeHtml(epubToc[0].title || 'Chapter 1') : '')}</span>
-          <button class="epub-nav-btn" id="epub-next" onclick="getPreviewer('.epub').navChapter(1)"${hasToc && epubToc.length > 1 ? '' : ' disabled'}>
-            Next <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-        </div>
-        <div class="epub-layout">
-          <div class="epub-sidebar" id="epub-sidebar">
-            <div class="epub-sidebar-header">
-              <span>Contents</span>
-              <button class="epub-sidebar-close" onclick="toggleSidebar()">✕</button>
-            </div>
-            <div class="epub-sidebar-list">${sidebarHtml}</div>
-          </div>
-          <div class="epub-content" id="epub-content">
-            ${hasCover ? '<div class="preview-reader" style="display:flex;align-items:center;justify-content:center;min-height:400px;"><div class="preview-cover"><img src="' + epubCover + '" alt="Cover"></div></div>' : '<div class="preview-reader preview-reader-loading">Loading...</div>'}
-          </div>
-        </div>
-      </div>`;
-
-    if (hasCover) {
-      const first = document.querySelector('.epub-toc-item');
-      if (first) first.classList.add('active');
-    } else if (hasToc) {
-      this.openChapter(0);
-    }
-  };
-})());
 
 // ── PDF Previewer ───────────────────────────────────────────────────
 registerPreviewer('.pdf', new (function() {
@@ -1064,29 +947,6 @@ registerPreviewer('.pdf', new (function() {
   };
 })());
 
-// ── DOCX Previewer ──────────────────────────────────────────────────
-registerPreviewer('.docx', new (function() {
-  this.load = function(tabsEl, contentEl) {
-    tabsEl.innerHTML = '';
-    contentEl.innerHTML = '<div class="preview-reader preview-reader-loading">Loading document...</div>';
-
-    fetch(`/api/book/${taskId}/docx-content`)
-      .then(r => { if (!r.ok) throw new Error('Failed to load DOCX content'); return r.json(); })
-      .then(data => {
-        contentEl.innerHTML = data.html;
-        // Apply virtual scrolling to top-level blocks
-        contentEl.querySelectorAll('.preview-reader > *').forEach(el => {
-          el.style.contentVisibility = 'auto';
-          el.style.containIntrinsicSize = 'auto 80px';
-        });
-      })
-      .catch(err => { contentEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);">${escapeHtml(err.message)}</div>`; });
-  };
-})());
-
-// ── Shared sidebar helpers (used by EPUB template HTML) ─────────────
-function toggleSidebar() { document.getElementById('epub-sidebar').classList.toggle('open'); }
-function closeSidebar() { document.getElementById('epub-sidebar').classList.remove('open'); }
 </script>
 </body>
 </html>

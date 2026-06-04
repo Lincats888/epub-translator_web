@@ -29,9 +29,11 @@ PAGE_DPI = 150         # render resolution for OCR (balance quality vs cost)
 
 # ── OCR prompt ────────────────────────────────────────────────────────────
 OCR_PROMPT = (
-    "请提取这张图片中的所有文字，保持原始段落和换行格式。"
-    "对于表格内容，请用制表符或空格对齐。"
-    "直接返回文字内容，不要添加任何解释或注释。"
+    "Extract ALL text from this image. "
+    "Output each text line or text block on its own line, in reading order (top to bottom, left to right). "
+    "Preserve the original language — do NOT translate. "
+    "For tables, use tabs or spaces to align columns. "
+    "Return ONLY the text content, no explanations."
 )
 
 

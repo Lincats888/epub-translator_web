@@ -23,7 +23,7 @@ from xml.etree import ElementTree as ET
 import yaml
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
+from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse, Response
 
 # ── Import existing EpubTranslator modules (no modifications) ──────────
 PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
@@ -400,6 +400,125 @@ def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN", bil
         _update(task_id, status="error", error=str(e))
 
 
+def _run_translate_ocr(task_id: str, file_path: str, target_lang: str = "zh-CN",
+                        bilingual: bool = True):
+    """OCR pipeline: Vision API OCR per page → translate → clean text pages."""
+    try:
+        _update(task_id, status="loading", step="Loading configuration...")
+        config = Config(CONFIG_PATH)
+        config.load()
+        if not config.api_key or config.api_key in ("sk-xxxx", "sk-your-api-key-here"):
+            _update(task_id, status="error", error="API key not configured. Click settings.")
+            return
+
+        from handlers.pdf_ocr import PdfOcr
+        from handlers.pdf_scanned_handler import PdfScannedRebuilder
+
+        import fitz as _fitz
+
+        # ── Phase 1: Extract text per page ────────────────────────
+        # Check if scanned → use Vision API OCR; if text PDF → direct extract
+        _is_scanned = PdfOcr.is_scanned(file_path)
+        _update(task_id, status="translating",
+                step="Extracting text..." if not _is_scanned else "OCR scanning...",
+                file_progress=0, file_total=100)
+
+        if _is_scanned:
+            ocr_api_key = config.ocr_api_key
+            if not ocr_api_key:
+                _update(task_id, status="error",
+                        error="OCR API key not configured. Please set it in Settings.")
+                return
+
+            ocr = PdfOcr(
+                api_key=ocr_api_key,
+                base_url=config.ocr_api_base or "https://api.siliconflow.com/v1",
+                model=config.ocr_model or "Qwen/Qwen3-VL-32B-Instruct",
+            )
+
+            page_texts = ocr.ocr_pdf(file_path,
+                                     progress_callback=lambda d, t, txt=None: _update(
+                                         task_id,
+                                         file_progress=d, file_total=t,
+                                         step=f"OCR {d}/{t}"))
+        else:
+            # Text PDF — extract directly with PyMuPDF (instant)
+            _doc = _fitz.open(file_path)
+            total_p = _doc.page_count
+            page_texts = []
+            for i in range(total_p):
+                page_texts.append(_doc[i].get_text())
+                _update(task_id,
+                        file_progress=i + 1, file_total=total_p,
+                        step=f"Extracting {i + 1}/{total_p}")
+            _doc.close()
+
+        total_pages = len(page_texts)
+
+        # Filter empty pages
+        non_empty = [t for t in page_texts if t.strip()]
+        if not non_empty:
+            _update(task_id, status="error",
+                    error="OCR found no text on any page.")
+            return
+
+        # ── Phase 2: Translate ─────────────────────────────────────
+        _update(task_id, status="translating",
+                step=f"Translating {len(non_empty)} pages...",
+                file_progress=total_pages, file_total=total_pages * 2)
+
+        translator_obj = Translator(config, target_lang, bilingual)
+
+        def on_trans_progress(done):
+            _update(task_id,
+                    file_progress=total_pages + done,
+                    file_total=total_pages * 2,
+                    step=f"Translating {total_pages + done}/{total_pages * 2}")
+
+        page_translations = translator_obj.translate_all(
+            non_empty, progress_callback=on_trans_progress,
+            stop_check=lambda: _tasks.get(task_id, {}).get("stopped", False)
+        )
+
+        if _tasks.get(task_id, {}).get("stopped"):
+            _update(task_id, status="stopped", step="Stopped by user")
+            return
+
+        # Map translations back to original page indices
+        trans_map = {}
+        ti = 0
+        for pi in range(total_pages):
+            if page_texts[pi].strip():
+                trans_map[pi] = page_translations[ti]
+                ti += 1
+        all_page_translations = [trans_map.get(i, "") for i in range(total_pages)]
+
+        # ── Phase 3: Build ─────────────────────────────────────────
+        _update(task_id, step="Building PDF...",
+                file_progress=total_pages * 2 - 1, file_total=total_pages * 2)
+
+        _doc = _fitz.open(file_path)
+        page_sizes = [(_doc[i].rect.width, _doc[i].rect.height) for i in range(total_pages)]
+        _doc.close()
+
+        output_dir = os.path.dirname(file_path)
+        output_path = os.path.join(output_dir,
+                                   os.path.splitext(os.path.basename(file_path))[0] + "_ocr.pdf")
+        output_path = PdfScannedRebuilder._build_clean_text_pdf(
+            page_texts=all_page_translations,
+            page_sizes=page_sizes,
+            output_path=output_path,
+            bilingual=bilingual,
+            original_pdf=file_path,
+        )
+
+        _update(task_id, status="done", step="Complete!",
+                output=output_path)
+
+    except Exception as e:
+        _update(task_id, status="error", error=f"OCR translation failed: {e}")
+
+
 def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-CN",
                            bilingual: bool = True, pdf_method: str = "pdf2zh"):
     """Background translation for DOCX/PDF using handlers."""
@@ -494,80 +613,14 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
 
         fragments = handler.extract(file_path, bilingual=bilingual)
 
-        # ── Scanned PDF → OCR + Image Rebuild ───────────────────────────
-        _is_scanned = False
+        # ── Scanned PDF → delegate to OCR pipeline ─────────────────────
         if file_path.lower().endswith(".pdf") and config.ocr_enabled:
             from handlers.pdf_ocr import PdfOcr
-            _is_scanned = PdfOcr.is_scanned(file_path)
-
-            if _is_scanned:
-                _update(task_id, step="Scanned PDF detected, detecting text blocks...",
-                        file_name=os.path.basename(file_path),
-                        file_progress=0, file_total=100)
-
-                try:
-                    from handlers.pdf_scanned_handler import PdfScannedRebuilder
-
-                    # 1. Detect text blocks on all pages
-                    rebuilder = PdfScannedRebuilder()
-                    blocks_per_page = rebuilder.detect_all_pages(file_path)
-                    all_texts = [b["text"] for pb in blocks_per_page for b in pb]
-                    total_blocks = len(all_texts)
-
-                    if not all_texts:
-                        _update(task_id, status="error",
-                                error="OCR detected no text on scanned PDF pages.")
-                        return
-
-                    _update(task_id, status="translating",
-                            step=f"Translating {total_blocks} text blocks...",
-                            current_file=0, total_files=1,
-                            file_name=os.path.basename(file_path),
-                            file_progress=0, file_total=total_blocks)
-
-                    # 2. Translate all detected text blocks
-                    translator_obj = Translator(config, target_lang, bilingual)
-
-                    def on_progress(done):
-                        _update(task_id, file_progress=min(done, total_blocks),
-                                file_total=total_blocks)
-
-                    all_translations = translator_obj.translate_all(
-                        all_texts, progress_callback=on_progress,
-                        stop_check=lambda: _tasks.get(task_id, {}).get("stopped", False)
-                    )
-
-                    # 3. Group translations by page
-                    trans_per_page = []
-                    idx = 0
-                    for page_blocks in blocks_per_page:
-                        page_trans = all_translations[idx:idx + len(page_blocks)]
-                        trans_per_page.append(page_trans)
-                        idx += len(page_blocks)
-
-                    # 4. Rebuild PDF with erased originals + translation overlay
-                    _update(task_id, step="Rebuilding PDF with translation overlay...",
-                            file_progress=total_blocks, file_total=total_blocks)
-
-                    output_path = rebuilder.rebuild(
-                        file_path, trans_per_page,
-                        bilingual=bilingual,
-                    )
-
-                    _update(task_id, status="done", step="Complete!",
-                            output=output_path, translated=total_blocks, cached=0)
-                    return
-
-                except Exception as e:
-                    _update(task_id, status="error", error=f"OCR rebuild failed: {e}")
-                    return
+            if PdfOcr.is_scanned(file_path):
+                _run_translate_ocr(task_id, file_path, target_lang, bilingual)
+                return
 
         if not fragments:
-            if _is_scanned:
-                _update(task_id, status="error", error="OCR did not find any text on this scanned PDF.")
-            else:
-                _update(task_id, status="error",
-                        error="No translatable content found. If this is a scanned PDF, enable OCR in settings.")
             return
 
         # Source language detection
@@ -603,7 +656,9 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
 
         def on_progress(done):
             progress_state["count"] = min(done, total)
-            _update(task_id, file_progress=progress_state["count"], file_total=total)
+            _update(task_id,
+                    file_progress=progress_state["count"], file_total=total,
+                    step=f"Translating {progress_state['count']}/{total}")
 
         if uncached_texts:
             try:
@@ -1006,10 +1061,57 @@ async def start_babeldoc_translation(task_id: str, body: dict = None):
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
 
+    # ── Scanned PDF detection ──────────────────────────────────────
+    if file_path.lower().endswith(".pdf"):
+        try:
+            from handlers.pdf_ocr import PdfOcr
+            config = Config(CONFIG_PATH)
+            config.load()
+            if config.ocr_enabled and PdfOcr.is_scanned(file_path):
+                ui_lang = (body or {}).get("ui_lang", "zh")
+                if ui_lang.startswith("zh"):
+                    msg = ("此 PDF 疑似扫描版（图片型）文档，BabelDOC 仅支持文字型 PDF。"
+                           "请使用 OCR 翻译页面（/ocrtranslate）处理扫描版 PDF。")
+                else:
+                    msg = ("This PDF appears to be a scanned (image-based) document. "
+                           "BabelDOC only supports text-based PDFs. "
+                           "Please use the OCR Translation page (/ocrtranslate) for scanned PDFs.")
+                raise HTTPException(400, msg)
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # If scan detection fails, proceed with BabelDOC
+
     _update(task_id, status="queued", step="Starting BabelDOC...", stopped=False,
             target_lang=target_lang, bilingual=bilingual)
 
     _executor.submit(_run_translate_babeldoc, task_id, file_path,
+                     target_lang, bilingual)
+
+    return {"ok": True}
+
+
+@app.post("/api/start_ocr/{task_id}")
+async def start_ocr_translation(task_id: str, body: dict = None):
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    if task.get("status") == "translating":
+        raise HTTPException(400, "Already translating")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+
+    target_lang = "zh-CN"
+    bilingual = True
+    if body:
+        target_lang = body.get("target_lang", target_lang)
+        bilingual = body.get("bilingual", True)
+
+    _update(task_id, status="queued", step="Starting OCR translation...", stopped=False,
+            target_lang=target_lang, bilingual=bilingual)
+
+    _executor.submit(_run_translate_ocr, task_id, file_path,
                      target_lang, bilingual)
 
     return {"ok": True}
@@ -1096,6 +1198,12 @@ async def get_config():
     plain_key = decrypt(raw_key) if encrypted else raw_key
     has_key = bool(plain_key and plain_key not in ("sk-xxxx", "sk-your-api-key-here"))
 
+    # OCR API key
+    raw_ocr_key = cfg.get("ocr_api_key", "")
+    ocr_encrypted = is_encrypted(raw_ocr_key)
+    plain_ocr_key = decrypt(raw_ocr_key) if ocr_encrypted else raw_ocr_key
+    has_ocr_key = bool(plain_ocr_key)
+
     return {
         "api_key_masked": _mask_key(raw_key) if has_key else "",
         "api_key_set": has_key,
@@ -1104,6 +1212,11 @@ async def get_config():
         "model": cfg.get("model", ""),
         "translation_mode": cfg.get("translation_mode", "bilingual"),
         "ocr_enabled": cfg.get("ocr_enabled", True),
+        "ocr_api_key_masked": _mask_key(raw_ocr_key) if has_ocr_key else "",
+        "ocr_api_key_set": has_ocr_key,
+        "ocr_api_key_encrypted": ocr_encrypted,
+        "ocr_api_base": cfg.get("ocr_api_base", ""),
+        "ocr_model": cfg.get("ocr_model", ""),
     }
 
 
@@ -1128,6 +1241,13 @@ async def update_config(body: dict):
     # OCR settings
     if "ocr_enabled" in body:
         cfg["ocr_enabled"] = body["ocr_enabled"]
+    if "ocr_api_key" in body:
+        raw_ocr = body["ocr_api_key"].strip()
+        cfg["ocr_api_key"] = encrypt(raw_ocr) if raw_ocr else ""
+    if "ocr_api_base" in body:
+        cfg["ocr_api_base"] = body["ocr_api_base"].strip()
+    if "ocr_model" in body:
+        cfg["ocr_model"] = body["ocr_model"].strip()
 
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
@@ -1142,6 +1262,19 @@ from fastapi.staticfiles import StaticFiles
 _images_dir = os.path.join(os.path.dirname(__file__), "images")
 if os.path.isdir(_images_dir):
     app.mount("/images", StaticFiles(directory=_images_dir), name="images")
+
+
+@app.get("/favicon.svg")
+async def favicon_svg():
+    favicon_path = os.path.join(os.path.dirname(__file__), "favicon.svg")
+    with open(favicon_path, "r", encoding="utf-8") as f:
+        return Response(content=f.read(), media_type="image/svg+xml")
+
+
+@app.get("/favicon.png")
+async def favicon_png():
+    favicon_path = os.path.join(os.path.dirname(__file__), "favicon.png")
+    return FileResponse(favicon_path, media_type="image/png")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1161,6 +1294,13 @@ async def guide():
 @app.get("/translate", response_class=HTMLResponse)
 async def translate_page():
     path = os.path.join(os.path.dirname(__file__), "translate.html")
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/ocrtranslate", response_class=HTMLResponse)
+async def ocr_translate_page():
+    path = os.path.join(os.path.dirname(__file__), "ocrtranslate.html")
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 

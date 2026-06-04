@@ -28,6 +28,7 @@ import time
 import logging
 import threading
 
+from babeldoc.format.pdf.document_il.midend.detect_scanned_file import ScannedPDFError
 from .base import BaseHandler, TextFragment
 
 logger = logging.getLogger(__name__)
@@ -207,8 +208,8 @@ class PdfBabeldocHandler(BaseHandler):
             # ── Quality ──
             use_alternating_pages_dual=True,   # 交替页面双语（与原生 PDF 相同模式）
             use_side_by_side_dual=False,        # 禁用同页并排（默认 True 会导致中文覆盖英文）
-            # ── Skip BabelDOC's own scan detection ──
-            skip_scanned_detection=True,
+            # ── Let BabelDOC detect scanned PDFs ──
+            skip_scanned_detection=False,
             # Skip automatic glossary extraction — saves 30-90s of
             # extra LLM API calls before translation starts.
             auto_extract_glossary=False,
@@ -259,6 +260,13 @@ class PdfBabeldocHandler(BaseHandler):
 
         try:
             result = translate_fn(config)
+        except ScannedPDFError:
+            raise RuntimeError(
+                "此 PDF 为扫描版（图片型）文档，BabelDOC 仅支持文字型 PDF。"
+                "请使用 OCR 翻译页面处理扫描版 PDF。"
+            )
+        except Exception:
+            raise
         finally:
             _poll_stop[0] = True
 
@@ -335,7 +343,7 @@ class PdfBabeldocHandler(BaseHandler):
             no_dual=not bilingual,
             use_alternating_pages_dual=True,
             use_side_by_side_dual=False,
-            skip_scanned_detection=True,
+            skip_scanned_detection=False,
             auto_extract_glossary=False,
         )
 
@@ -348,6 +356,11 @@ class PdfBabeldocHandler(BaseHandler):
                         if tr:
                             out = str(tr.dual_pdf_path if bilingual else tr.mono_pdf_path)
                             yield {"type": "result", "output_path": out}
+        except ScannedPDFError:
+            yield {"type": "error", "error": (
+                "此 PDF 为扫描版（图片型）文档，BabelDOC 仅支持文字型 PDF。"
+                "请使用 OCR 翻译页面处理扫描版 PDF。"
+            )}
         except Exception as e:
             logger.exception("BabelDOC async translation failed")
             yield {"type": "error", "error": str(e)}
