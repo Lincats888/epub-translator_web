@@ -319,9 +319,9 @@
     <a href="/guide" class="icon-btn" title="User Guide" style="text-decoration:none;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
     </a>
-    <a href="/?settings=open" class="icon-btn" title="Settings" style="text-decoration:none;">
+    <span class="icon-btn" title="Settings" onclick="openSettings()" style="cursor:pointer;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-    </a>
+    </span>
   </header>
 
   <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="handleFile(this.files[0])">
@@ -427,6 +427,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="/settings-modal.js"></script>
 <script>
 // ── i18n ───────────────────────────────────────────────────────────
 // Language is set on the homepage and stored in localStorage.
@@ -537,6 +538,7 @@ function applyLang() {
 // ── State ─────────────────────────────────────────────────────────
 let taskId = null, eventSource = null, timerInterval = null, startTime = 0;
 let apiKeyReady = false;
+let maxFileSizeMB = 500;  // from config, updated in checkConfig()
 
 // ── Preview State ─────────────────────────────────────────────────
 let previewOpen = false;
@@ -568,13 +570,14 @@ function loadLanguages() {
 // ── Config ────────────────────────────────────────────────────────
 function checkConfig() {
   fetch('/api/config').then(r=>r.json()).then(c => {
+    if (c.max_file_size_mb) maxFileSizeMB = c.max_file_size_mb;
     if (c.api_key_set) {
       apiKeyReady = true;
       document.getElementById('btn-open-book').disabled = false;
     } else {
       apiKeyReady = false;
       document.getElementById('btn-open-book').disabled = true;
-      window.location.href = '/?settings=open';
+      openSettings();
     }
   }).catch(()=>{});
 }
@@ -622,7 +625,7 @@ function handleFile(file) {
   if (!file) return;
   const ext = file.name.toLowerCase().split('.').pop();
   if (ext !== 'pdf') { toast(t('selectFile'),'error'); return; }
-  if (file.size > 100*1024*1024) { toast(t('fileTooLarge'),'error'); return; }
+  if (file.size > maxFileSizeMB * 1024 * 1024) { toast(t('fileTooLarge') + ' (' + maxFileSizeMB + ' MB)', 'error'); return; }
 
   // Reset preview
   const panel = document.getElementById('preview-panel');

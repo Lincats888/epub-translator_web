@@ -74,7 +74,7 @@ class PdfHandler(BaseHandler):
     def supported_extensions():
         return [".pdf"]
 
-    def extract(self, file_path, skip_tags=None, bilingual=True):
+    def extract(self, file_path, skip_tags=None, bilingual=True, pages=None):
         """Extract translatable text blocks from a PDF.
 
         Strategy:
@@ -82,6 +82,9 @@ class PdfHandler(BaseHandler):
         2. Extract text spans per page with position/format info
         3. Group spans into lines, then paragraphs by vertical spacing
         4. Skip headers/footers (top/bottom 10%), page numbers, code
+
+        Args:
+            pages: Optional page range string (e.g. "1-5,8,10-12"). None = all.
         """
         fitz = _get_fitz()
         doc = fitz.open(file_path)
@@ -99,7 +102,25 @@ class PdfHandler(BaseHandler):
 
         fragments = []
 
+        # ── Parse page range ──────────────────────────────────────────
+        target_pages = None  # None = all pages
+        if pages:
+            target_pages = set()
+            for part in pages.split(","):
+                part = part.strip()
+                if "-" in part:
+                    a, b = part.split("-", 1)
+                    start = int(a) if a else 1
+                    end = int(b) if b else total_pages
+                    for p in range(start, min(end, total_pages) + 1):
+                        target_pages.add(p)
+                else:
+                    target_pages.add(int(part))
+
         for page_num in range(total_pages):
+            # Skip pages not in the requested range
+            if target_pages is not None and (page_num + 1) not in target_pages:
+                continue
             page = doc[page_num]
             page_height = page.rect.height
             page_width = page.rect.width
@@ -309,7 +330,7 @@ class PdfHandler(BaseHandler):
 
     @classmethod
     def rebuild_via_pdf2zh(cls, file_path, output_dir=None, service="deepseek",
-                           vfont="", vchar=""):
+                           vfont="", vchar="", pages=None):
         """Use PDFMathTranslate to translate and rebuild the PDF.
 
         Args:
@@ -318,6 +339,7 @@ class PdfHandler(BaseHandler):
             service: Translation service name.
             vfont: Regex for formula font names. Empty = translate everything.
             vchar: Regex for formula characters. Empty = translate everything.
+            pages: Page range string (e.g. "1-5,8,10-12"). None = all pages.
         delegates to pdf2zh's content-stream-level reconstruction, which
         preserves layout significantly better than our bbox-based approach.
         """
@@ -338,6 +360,8 @@ class PdfHandler(BaseHandler):
             cmd += ["--vfont", vfont]
         if vchar is not None:
             cmd += ["--vchar", vchar]
+        if pages:
+            cmd += ["--pages", pages]
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         # pdf2zh writes {stem}-dual.pdf alongside its current working

@@ -520,7 +520,8 @@ def _run_translate_ocr(task_id: str, file_path: str, target_lang: str = "zh-CN",
 
 
 def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-CN",
-                           bilingual: bool = True, pdf_method: str = "pdf2zh"):
+                           bilingual: bool = True, pdf_method: str = "pdf2zh",
+                           pages: str = None):
     """Background translation for DOCX/PDF using handlers."""
     try:
         # ── pdf2zh fast path: delegates entirely to PDFMathTranslate ──
@@ -541,7 +542,7 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
                     try:
                         result_holder[0] = PdfHandler.rebuild_via_pdf2zh(
                             file_path, output_dir=os.path.dirname(file_path),
-                            vfont="", vchar="")
+                            vfont="", vchar="", pages=pages)
                     except Exception as e:
                         error_holder[0] = e
                     done_flag.set()
@@ -611,7 +612,7 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
             _update(task_id, status="error", error="Unsupported file format.")
             return
 
-        fragments = handler.extract(file_path, bilingual=bilingual)
+        fragments = handler.extract(file_path, bilingual=bilingual, pages=pages)
 
         # ── Scanned PDF → delegate to OCR pipeline ─────────────────────
         if file_path.lower().endswith(".pdf") and config.ocr_enabled:
@@ -718,7 +719,7 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
 
 
 def _run_translate_babeldoc(task_id: str, file_path: str, target_lang: str = "zh-CN",
-                             bilingual: bool = True):
+                             bilingual: bool = True, pages: str = None):
     """Background PDF translation using BabelDOC engine (one-shot IL pipeline)."""
     try:
         _update(task_id, status="loading", step="Loading configuration...")
@@ -763,6 +764,7 @@ def _run_translate_babeldoc(task_id: str, file_path: str, target_lang: str = "zh
             bilingual=bilingual,
             output_dir=OUTPUT_DIR,
             progress_callback=progress_callback,
+            pages=pages,
         )
 
         # Check if stopped during translation
@@ -1026,10 +1028,12 @@ async def start_translation(task_id: str, body: dict = None):
     target_lang = "zh-CN"
     bilingual = True
     pdf_method = "babeldoc"  # default PDF engine
+    pages = None  # page range string, e.g. "1-5,8"
     if body:
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
         pdf_method = body.get("pdf_method", pdf_method)
+        pages = body.get("pages") or None
 
     _update(task_id, status="queued", step="Starting...", stopped=False,
             target_lang=target_lang, bilingual=bilingual)
@@ -1039,7 +1043,7 @@ async def start_translation(task_id: str, body: dict = None):
         _executor.submit(_run_translate, task_id, file_path, target_lang, bilingual)
     else:
         _executor.submit(_run_translate_generic, task_id, file_path,
-                         target_lang, bilingual, pdf_method)
+                         target_lang, bilingual, pdf_method, pages)
 
     return {"ok": True}
 
@@ -1057,9 +1061,11 @@ async def start_babeldoc_translation(task_id: str, body: dict = None):
 
     target_lang = "zh-CN"
     bilingual = True
+    pages = None
     if body:
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
+        pages = body.get("pages") or None
 
     # ── Scanned PDF detection ──────────────────────────────────────
     if file_path.lower().endswith(".pdf"):
@@ -1086,7 +1092,7 @@ async def start_babeldoc_translation(task_id: str, body: dict = None):
             target_lang=target_lang, bilingual=bilingual)
 
     _executor.submit(_run_translate_babeldoc, task_id, file_path,
-                     target_lang, bilingual)
+                     target_lang, bilingual, pages)
 
     return {"ok": True}
 
@@ -1126,6 +1132,15 @@ async def stop_translation(task_id: str):
         raise HTTPException(400, "Not running")
     _update(task_id, stopped=True)
     return {"ok": True}
+
+
+@app.get("/api/task/{task_id}")
+async def get_task_status(task_id: str):
+    """Return current task state as JSON (for resume after page navigation)."""
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    return dict(task)
 
 
 @app.get("/api/progress/{task_id}")
@@ -1217,6 +1232,8 @@ async def get_config():
         "ocr_api_key_encrypted": ocr_encrypted,
         "ocr_api_base": cfg.get("ocr_api_base", ""),
         "ocr_model": cfg.get("ocr_model", ""),
+        "max_file_size_mb": cfg.get("max_file_size_mb", 500),
+        "max_concurrent_tasks": cfg.get("max_concurrent_tasks", 1),
     }
 
 
@@ -1248,6 +1265,11 @@ async def update_config(body: dict):
         cfg["ocr_api_base"] = body["ocr_api_base"].strip()
     if "ocr_model" in body:
         cfg["ocr_model"] = body["ocr_model"].strip()
+    # General settings
+    if "max_file_size_mb" in body:
+        cfg["max_file_size_mb"] = int(body["max_file_size_mb"])
+    if "max_concurrent_tasks" in body:
+        cfg["max_concurrent_tasks"] = int(body["max_concurrent_tasks"])
 
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
@@ -1310,3 +1332,18 @@ async def login_page():
     path = os.path.join(os.path.dirname(__file__), "login.html")
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
+
+
+@app.get("/batch", response_class=HTMLResponse)
+async def batch_page():
+    path = os.path.join(os.path.dirname(__file__), "batch.html")
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/settings-modal.js")
+async def settings_modal_js():
+    """Serve the shared settings modal JavaScript."""
+    js_path = os.path.join(os.path.dirname(__file__), "settings-modal.js")
+    with open(js_path, "r", encoding="utf-8") as f:
+        return Response(content=f.read(), media_type="application/javascript")

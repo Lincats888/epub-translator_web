@@ -47,7 +47,7 @@ class BaseHandler(ABC):
     @abstractmethod
     def rebuild(self, file_path: str, fragments: list[TextFragment],
                 translations: list[str], bilingual: bool,
-                target_lang: str = "zh-CN") -> str:
+                target_lang: str = "zh-CN", **kwargs) -> str:
         """Write translations back and produce the output file.
 
         Args:
@@ -56,6 +56,7 @@ class BaseHandler(ABC):
             translations: Parallel list of translated texts
             bilingual: Whether to keep original + add translation
             target_lang: Target language code for lang attributes (EPUB only)
+            **kwargs: Extra handler-specific options (e.g. method for PDF)
 
         Returns:
             Path to the output file

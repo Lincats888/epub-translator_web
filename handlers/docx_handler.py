@@ -147,7 +147,7 @@ class DocxHandler(BaseHandler):
         return fragments
 
     def rebuild(self, file_path, fragments, translations, bilingual,
-                target_lang="zh-CN"):
+                target_lang="zh-CN", **kwargs):
         """Write translations back, preserving all formatting."""
         docx = _get_docx()
         output_path = self._output_path(file_path)

@@ -119,6 +119,7 @@ class PdfBabeldocHandler(BaseHandler):
         bilingual=True,
         output_dir=None,
         progress_callback=None,
+        pages=None,
     ):
         """One-shot full translation via BabelDOC's IL pipeline.
 
@@ -134,6 +135,7 @@ class PdfBabeldocHandler(BaseHandler):
                        False → target-language-only PDF.
             output_dir: Output directory (default: input file's dir).
             progress_callback: Optional callable(stage, pct, msg).
+            pages: Page range string (e.g. "1-5,8,10-12"). None = all pages.
 
         Returns:
             Absolute path to the output PDF.
@@ -199,6 +201,7 @@ class PdfBabeldocHandler(BaseHandler):
             lang_out=lang_out,
             doc_layout_model=None,      # auto-download on first call
             output_dir=os.path.abspath(output_dir),
+            pages=pages,                # page range, None = all
             qps=10,                     # API QPS limit
             # ── Output mode ──
             # bilingual=True  → no_mono=True,  no_dual=False → dual PDF only
@@ -221,11 +224,17 @@ class PdfBabeldocHandler(BaseHandler):
         # Instead, use the proven translate_fn() with a lightweight
         # polling thread that reports progress by elapsed time.
 
-        # Remove leftover output files to prevent file-lock errors
-        for f in os.listdir(output_dir):
-            if f.endswith(".dual.pdf") or f.endswith(".mono.pdf"):
+        # Remove leftover output of same input file to prevent file-lock errors
+        # Only clean up files related to the current translation, not ALL previous outputs
+        _input_stem = os.path.splitext(os.path.basename(file_path))[0]
+        _expected_outputs = [
+            os.path.join(output_dir, _input_stem + ".dual.pdf"),
+            os.path.join(output_dir, _input_stem + ".mono.pdf"),
+        ]
+        for _fpath in _expected_outputs:
+            if os.path.exists(_fpath):
                 try:
-                    os.remove(os.path.join(output_dir, f))
+                    os.remove(_fpath)
                 except OSError:
                     pass
 
@@ -298,6 +307,7 @@ class PdfBabeldocHandler(BaseHandler):
         model=None,
         bilingual=True,
         output_dir=None,
+        pages=None,
     ):
         """Async version of translate_full() that yields SSE-style progress events.
 
@@ -338,6 +348,7 @@ class PdfBabeldocHandler(BaseHandler):
             lang_out=lang_out,
             doc_layout_model=None,
             output_dir=os.path.abspath(output_dir),
+            pages=pages,    # page range, None = all
             qps=10,
             no_mono=bilingual,
             no_dual=not bilingual,

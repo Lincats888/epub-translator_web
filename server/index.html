@@ -156,6 +156,10 @@
           <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></span>
           <span><span class="dm-label" data-i18n="menuEbook">电子书翻译</span><span class="dm-desc" data-i18n="menuEbookDesc">EPUB · DOCX · 文字 PDF · 三引擎</span></span>
         </a>
+        <a href="/batch">
+          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+          <span><span class="dm-label" data-i18n="menuBatch">批量翻译</span><span class="dm-desc" data-i18n="menuBatchDesc">多文件上传 · 智能排队</span></span>
+        </a>
         <a href="/ocrtranslate">
           <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
           <span><span class="dm-label" data-i18n="menuOcr">OCR 翻译</span><span class="dm-desc" data-i18n="menuOcrDesc">扫描版 PDF · AI 识别 + 覆写</span></span>
@@ -284,7 +288,10 @@
     </div>
     <div class="settings-body">
       <div class="settings-sidebar">
-        <div class="settings-nav-item active" data-section="translate" onclick="switchSettingsSection('translate')">
+        <div class="settings-nav-item active" data-section="general" onclick="switchSettingsSection('general')">
+          <span data-i18n="settingsNavGeneral">通用</span>
+        </div>
+        <div class="settings-nav-item" data-section="translate" onclick="switchSettingsSection('translate')">
           <span data-i18n="settingsNavTranslate">翻译 API</span>
         </div>
         <div class="settings-nav-item" data-section="ocr" onclick="switchSettingsSection('ocr')">
@@ -292,8 +299,21 @@
         </div>
       </div>
       <div class="settings-content">
+        <!-- General Section -->
+        <div class="settings-section active" id="sec-general">
+          <div class="settings-field">
+            <label><span data-i18n="generalMaxFileSize">最大文件大小 (MB)</span></label>
+            <input id="cfg-max-file-size" type="number" min="1" max="2000" placeholder="500">
+            <div style="font-size:11px;color:var(--text2);margin-top:2px;" data-i18n="generalMaxFileSizeDesc">适用于所有翻译页面的上传限制</div>
+          </div>
+          <div class="settings-field">
+            <label><span data-i18n="generalMaxConcurrent">最大并发翻译数</span></label>
+            <input id="cfg-max-concurrent" type="number" min="1" max="5" placeholder="1">
+            <div style="font-size:11px;color:var(--text2);margin-top:2px;" data-i18n="generalMaxConcurrentDesc">仅适用于批量翻译页面 (1-5)</div>
+          </div>
+        </div>
         <!-- Translate Section -->
-        <div class="settings-section active" id="sec-translate">
+        <div class="settings-section" id="sec-translate">
           <div class="settings-warn" id="api-key-warning">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span data-i18n="apiKeyWarning">请先输入 API Key</span>
@@ -374,6 +394,7 @@ const i18n = {
     navGuide: '使用指南', navLogin: '登录', navStart: '开始翻译',
     menuTranslate: '翻译', menuResources: '资源',
     menuEbook: '电子书翻译', menuEbookDesc: 'EPUB · DOCX · 文字 PDF · 三引擎',
+    menuBatch: '批量翻译', menuBatchDesc: '多文件上传 · 智能排队',
     menuOcr: 'OCR 翻译', menuOcrDesc: '扫描版 PDF · AI 识别 + 覆写',
     menuGuide: '使用指南', menuGuideDesc: '快速上手指南',
     menuGithubDesc: '开源代码仓库',
@@ -391,8 +412,13 @@ const i18n = {
     step3Title: '下载译文', step3Desc: '一键下载翻译完成的文件，保留原始排版',
     footer: '© 2026 老丁 · 本工具仅供个人学习研究使用',
     settingsTitle: '设置',
+    settingsNavGeneral: '通用',
     settingsNavTranslate: '翻译 API',
     settingsNavOcr: 'OCR 设置',
+    generalMaxFileSize: '最大文件大小 (MB)',
+    generalMaxFileSizeDesc: '适用于所有翻译页面的上传限制',
+    generalMaxConcurrent: '最大并发翻译数',
+    generalMaxConcurrentDesc: '仅适用于批量翻译页面 (1-5)',
     apiKeyLabel: 'API Key', apiBaseLabel: 'API 地址', modelLabel: '模型', modeLabel: '翻译模式',
     modeBilingual: '双语（原文 + 译文）', modeChineseOnly: '目标语言（只保留译文）',
     ocrEnabled: '启用 OCR', ocrApiKeyLabel: 'OCR API Key', ocrApiBaseLabel: 'OCR API 地址', ocrModelLabel: 'OCR 模型',
@@ -403,6 +429,7 @@ const i18n = {
     navGuide: 'Guide', navLogin: 'Login', navStart: 'Start',
     menuTranslate: 'Translate', menuResources: 'Resources',
     menuEbook: 'E-book Translation', menuEbookDesc: 'EPUB · DOCX · Text PDF · 3 Engines',
+    menuBatch: 'Batch Translation', menuBatchDesc: 'Multi-file · Smart Queue',
     menuOcr: 'OCR Translation', menuOcrDesc: 'Scanned PDF · AI Recognition + Overlay',
     menuGuide: 'User Guide', menuGuideDesc: 'Quick start guide',
     menuGithubDesc: 'Open source repository',
@@ -420,8 +447,13 @@ const i18n = {
     step3Title: 'Download', step3Desc: 'One-click download of translated file with original layout preserved',
     footer: '© 2026 Lao Ding · For personal learning and research use only',
     settingsTitle: 'Settings',
+    settingsNavGeneral: 'General',
     settingsNavTranslate: 'Translation API',
     settingsNavOcr: 'OCR Settings',
+    generalMaxFileSize: 'Max File Size (MB)',
+    generalMaxFileSizeDesc: 'Upload limit for all translation pages',
+    generalMaxConcurrent: 'Max Concurrent Tasks',
+    generalMaxConcurrentDesc: 'Batch translation only (1-5)',
     apiKeyLabel: 'API Key', apiBaseLabel: 'API Base URL', modelLabel: 'Model', modeLabel: 'Mode',
     modeBilingual: 'Bilingual (Original + Translation)', modeChineseOnly: 'Target Language Only',
     ocrEnabled: 'Enable OCR', ocrApiKeyLabel: 'OCR API Key', ocrApiBaseLabel: 'OCR API URL', ocrModelLabel: 'OCR Model',
@@ -514,6 +546,9 @@ function openSettings() {
     badge.style.display = (c.api_key_set && c.api_key_encrypted) ? 'inline-block' : 'none';
     const warn = document.getElementById('api-key-warning');
     warn.classList.toggle('show', !c.api_key_set);
+    // General
+    document.getElementById('cfg-max-file-size').value = c.max_file_size_mb || 500;
+    document.getElementById('cfg-max-concurrent').value = c.max_concurrent_tasks || 1;
     // OCR
     document.getElementById('cfg-ocr-enabled').value = c.ocr_enabled ? 'true' : 'false';
     document.getElementById('cfg-ocr-key').value = '';
@@ -542,6 +577,8 @@ function saveSettings() {
     ocr_enabled: document.getElementById('cfg-ocr-enabled').value === 'true',
     ocr_api_base: document.getElementById('cfg-ocr-base').value,
     ocr_model: document.getElementById('cfg-ocr-model').value,
+    max_file_size_mb: parseInt(document.getElementById('cfg-max-file-size').value) || 500,
+    max_concurrent_tasks: parseInt(document.getElementById('cfg-max-concurrent').value) || 1,
   };
   const k = document.getElementById('cfg-key').value.trim();
   if (k) body.api_key = k;

@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batch Translation — EbookTranslator</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.loli.net">
+  <link href="https://fonts.loli.net/css2?family=Inter:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FCF9F5; --card: #FFFFFF; --text: #2D2D2D; --text2: #8A8A8A;
+      --accent: #C8956C; --accent-hover: #B8845B; --accent-light: #F5EDE6;
+      --border: #EDE8E2; --shadow: 0 2px 16px rgba(0,0,0,0.06);
+      --radius: 16px; --serif: 'Noto Serif SC','Georgia',serif;
+      --sans: 'Inter',-apple-system,'Segoe UI',sans-serif;
+      --green: #5DAA7E; --green-bg: #E8F5EE; --red: #E85D5D; --red-bg: #FDECEC;
+      --orange: #E65100; --orange-bg: #FFF3E0;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── Nav ── */
+    nav#nav {
+      position: sticky; top: 0; z-index: 100; background: var(--card);
+      border-bottom: 1px solid var(--border); box-shadow: 0 1px 8px rgba(0,0,0,0.04);
+    }
+    .nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 32px; height: 64px;
+      display: flex; align-items: center; gap: 24px; }
+    .logo { font-family: var(--serif); font-size: 18px; font-weight: 600;
+      color: var(--accent); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+    .logo-icon { width: 30px; height: 30px; flex-shrink: 0; }
+    .nav-spacer { flex: 1; }
+    .nav-dropdown { position: relative; }
+    .nav-dropdown > span { font-size: 14px; color: var(--text2); cursor: pointer;
+      padding: 8px 0; display: flex; align-items: center; gap: 4px; transition: color 0.2s;
+      user-select: none; }
+    .nav-dropdown > span:hover, .nav-dropdown.open > span { color: var(--text); }
+    .nav-dropdown > span svg { width: 12px; height: 12px; transition: transform 0.2s; }
+    .nav-dropdown.open > span svg { transform: rotate(180deg); }
+    .dropdown-menu { position: absolute; top: 100%; left: 50%;
+      transform: translateX(-50%) translateY(4px); background: var(--card);
+      border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.10); padding: 8px; min-width: 200px;
+      opacity: 0; visibility: hidden; transition: all 0.2s; z-index: 200; }
+    .nav-dropdown.open .dropdown-menu { opacity: 1; visibility: visible;
+      transform: translateX(-50%) translateY(8px); }
+    .dropdown-menu a { display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 8px; font-size: 13px; color: var(--text);
+      text-decoration: none; transition: background 0.15s; white-space: nowrap; }
+    .dropdown-menu a:hover { background: var(--accent-light); }
+    .dropdown-menu .dm-icon { width: 18px; height: 18px; color: var(--accent); flex-shrink: 0; }
+    .dropdown-menu .dm-label { font-weight: 500; }
+    .dropdown-menu .dm-desc { font-size: 11px; color: var(--text2); display: block; }
+    .nav-btn {
+      display: flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 10px;
+      font-size: 13px; font-weight: 500; text-decoration: none; transition: all 0.15s;
+      border: 1px solid var(--border); color: var(--text);
+    }
+    .nav-btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .nav-btn-primary:hover { background: var(--accent-hover); }
+    .lang-btn { width: auto; padding: 0 10px; cursor: pointer; background: none;
+      border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-weight: 500;
+      color: var(--text2); display: flex; align-items: center; gap: 4px; position: relative; }
+    .lang-btn:hover { background: var(--accent-light); color: var(--accent); }
+    .lang-popup { position: absolute; top: 44px; right: 0; background: var(--card);
+      border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      border: 1px solid var(--border); padding: 4px; min-width: 120px;
+      display: none; z-index: 200; }
+    .lang-popup.show { display: block; }
+    .lang-option { padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+      transition: background 0.15s; }
+    .lang-option:hover { background: var(--accent-light); }
+    .lang-option.active { font-weight: 600; color: var(--accent); }
+    .icon-btn { width: 36px; height: 36px; border: 1px solid var(--border);
+      border-radius: 10px; background: var(--card); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text2); text-decoration: none; font-size: 16px; transition: all 0.15s; }
+    .icon-btn:hover { background: var(--accent-light); color: var(--accent); }
+
+    @media (max-width: 720px) {
+      .nav-inner { padding: 0 16px; gap: 12px; }
+    }
+
+    /* ── Main Layout ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 32px 80px; }
+    .page-title { font-family: var(--serif); font-size: 24px; font-weight: 600; margin-bottom: 20px; }
+
+    /* ── Upload Zone ── */
+    .upload-zone {
+      border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px;
+      text-align: center; cursor: pointer; transition: all 0.2s; background: var(--card);
+      position: relative; margin-bottom: 20px;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent); background: var(--accent-light);
+    }
+    .upload-zone p { font-size: 15px; color: var(--text2); }
+    .upload-zone .icon { font-size: 36px; margin-bottom: 10px; display: block; }
+    .upload-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+    .upload-hint { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+    /* ── Upload Queue ── */
+    .upload-queue { margin-bottom: 20px; }
+    .upload-queue-item {
+      display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+      background: var(--card); border-radius: 10px; margin-bottom: 6px;
+      border: 1px solid var(--border);
+    }
+    .upload-queue-item .fname { flex: 1; font-size: 14px; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .upload-queue-item .fsize { font-size: 12px; color: var(--text2); min-width: 60px; }
+    .upload-queue-item .ustatus { font-size: 12px; min-width: 50px; text-align: right; }
+    .upload-queue-item .ustatus.ok { color: var(--green); }
+    .upload-queue-item .ustatus.fail { color: var(--red); }
+    .mini-bar { width: 100px; height: 5px; background: var(--border); border-radius: 3px;
+      overflow: hidden; flex-shrink: 0; }
+    .mini-bar-fill { height: 100%; border-radius: 3px; background: var(--accent);
+      transition: width 0.3s; }
+
+    /* ── Controls Bar ── */
+    .controls-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 14px 18px; background: var(--card); border-radius: var(--radius);
+      box-shadow: var(--shadow); margin-bottom: 20px;
+    }
+    .controls-bar label { font-size: 12px; font-weight: 500; color: var(--text2); }
+    .controls-bar select {
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 13px; font-family: var(--sans); background: var(--bg); color: var(--text);
+      outline: none;
+    }
+    .controls-bar select:focus { border-color: var(--accent); }
+    .btn {
+      font-size: 13px; font-weight: 500; padding: 8px 18px; border-radius: 10px;
+      border: none; cursor: pointer; font-family: var(--sans);
+      transition: all 0.15s; text-decoration: none; display: inline-flex;
+      align-items: center; gap: 5px;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #D45050; }
+    .btn-ghost {
+      border: 1px solid var(--border); background: var(--card); color: var(--text2);
+    }
+    .btn-ghost:hover:not(:disabled) { background: var(--accent-light); color: var(--text); }
+    .btn-sm { font-size: 11px; padding: 4px 10px; border-radius: 6px; }
+    .btn-download { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+    .btn-download:hover:not(:disabled) { opacity: 0.85; }
+    .spacer { flex: 1; }
+
+    /* ── Batch Table ── */
+    .batch-card {
+      background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .batch-header {
+      display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .batch-header .batch-title { font-weight: 600; font-size: 14px; }
+    .batch-status {
+      font-size: 11px; padding: 3px 10px; border-radius: 6px; font-weight: 500;
+    }
+    .batch-status.running { background: var(--orange-bg); color: var(--orange); }
+    .batch-status.done { background: var(--green-bg); color: var(--green); }
+    .batch-status.stopped { background: var(--border); color: var(--text2); }
+    .batch-status.idle { background: var(--border); color: var(--text2); }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--text2);
+      text-align: left; border-bottom: 1px solid var(--border); background: var(--bg);
+      text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+    }
+    tbody td {
+      padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
+    }
+    .badge-done { background: var(--green-bg); color: var(--green); }
+    .badge-running { background: var(--orange-bg); color: var(--orange); }
+    .badge-waiting { background: var(--border); color: var(--text2); }
+    .badge-error { background: var(--red-bg); color: var(--red); }
+    .badge-stopped { background: var(--red-bg); color: var(--red); }
+    .row-progress-bar { display: flex; align-items: center; gap: 6px; }
+    .row-bar { width: 70px; height: 5px; background: var(--border); border-radius: 3px;
+      overflow: hidden; flex-shrink: 0; }
+    .row-bar-fill { height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), #D4A882); transition: width 0.3s; }
+    .row-pct { font-size: 11px; color: var(--text2); min-width: 30px; text-align: right; }
+    .row-step { font-size: 10px; color: var(--text2); }
+    .row-time { font-size: 10px; color: var(--accent); font-weight: 500;
+      font-variant-numeric: tabular-nums; margin-top: 2px; }
+    .actions-cell { display: flex; gap: 4px; flex-wrap: wrap; }
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; top: 24px; right: 24px; z-index: 300; padding: 12px 20px;
+      border-radius: 12px; font-size: 14px; font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12); transform: translateX(120%);
+      transition: transform 0.3s; max-width: 400px;
+    }
+    .toast.show { transform: translateX(0); }
+    .toast-success { background: #E8F5EE; color: #2D7A4F; }
+    .toast-error { background: #FDECEC; color: #B83232; }
+
+    @media (max-width: 720px) {
+      .container { padding: 16px; }
+      .controls-bar { gap: 6px; }
+      .hide-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <svg class="logo-icon" viewBox="0 0 32 32" fill="none">
+        <circle cx="17" cy="15" r="8" stroke="currentColor" stroke-width="2"/>
+        <rect x="3" y="5" width="12" height="17" rx="2" stroke="currentColor" stroke-width="2" fill="var(--bg)"/>
+        <path d="M8 10h4M8 14h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>EbookTranslator</span>
+    </a>
+    <div class="nav-spacer"></div>
+
+    <div class="nav-dropdown" id="dd-features">
+      <span onclick="toggleDropdown('dd-features')">
+        <span data-i18n="menuTranslate">翻译</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </span>
+      <div class="dropdown-menu">
+        <a href="/translate">
+          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></span>
+          <span><span class="dm-label" data-i18n="menuEbook">电子书翻译</span><span class="dm-desc" data-i18n="menuEbookDesc">EPUB · DOCX · 文字 PDF · 三引擎</span></span>
+        </a>
+        <a href="/batch">
+          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+          <span><span class="dm-label" data-i18n="menuBatch">批量翻译</span><span class="dm-desc" data-i18n="menuBatchDesc">多文件上传 · 智能排队</span></span>
+        </a>
+        <a href="/ocrtranslate">
+          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
+          <span><span class="dm-label" data-i18n="menuOcr">OCR 翻译</span><span class="dm-desc" data-i18n="menuOcrDesc">扫描版 PDF · AI 识别 + 覆写</span></span>
+        </a>
+      </div>
+    </div>
+
+    <div class="nav-dropdown" id="dd-resources">
+      <span onclick="toggleDropdown('dd-resources')">
+        <span data-i18n="menuResources">资源</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </span>
+      <div class="dropdown-menu">
+        <a href="/guide">
+          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          <span><span class="dm-label" data-i18n="menuGuide">使用指南</span><span class="dm-desc" data-i18n="menuGuideDesc">快速上手指南</span></span>
+        </a>
+        <a href="https://github.com/Lincats888/epub-translator_web" target="_blank">
+          <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 001.76 3.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg></span>
+          <span><span class="dm-label">GitHub</span><span class="dm-desc" data-i18n="menuGithubDesc">开源代码仓库</span></span>
+        </a>
+      </div>
+    </div>
+
+    <a href="/translate" class="nav-btn nav-btn-primary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      <span data-i18n="navStart">开始翻译</span>
+    </a>
+
+    <button class="lang-btn" onclick="toggleLangPopup()" id="lang-btn">中</button>
+    <div class="lang-popup" id="lang-popup">
+      <div class="lang-option" data-lang="zh" onclick="setLang('zh')">简体中文</div>
+      <div class="lang-option" data-lang="en" onclick="setLang('en')">English</div>
+    </div>
+    <span class="icon-btn" title="Settings" onclick="openSettings()" style="cursor:pointer;">⚙</span>
+  </div>
+</nav>
+
+<div class="container">
+  <h1 class="page-title" data-i18n="batchTitle">批量翻译</h1>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="upload-zone">
+    <span class="icon">📚</span>
+    <p data-i18n="dropHere">拖拽文件到此处，或点击选择</p>
+    <p class="upload-hint" data-i18n="supportedFormats">支持：EPUB · DOCX · PDF</p>
+    <input type="file" id="file-input" multiple accept=".epub,.docx,.pdf" onchange="handleBatchFiles(this.files)">
+  </div>
+
+  <!-- Upload Queue -->
+  <div class="upload-queue" id="upload-queue" style="display:none;"></div>
+
+  <!-- Controls Bar -->
+  <div class="controls-bar" id="controls-bar">
+    <label data-i18n="targetLang">目标语言:</label>
+    <select id="lang-select"></select>
+    <label data-i18n="modeLabel" style="margin-left:6px;">模式:</label>
+    <select id="mode-select">
+      <option value="bilingual" data-i18n="modeBilingual">双语</option>
+      <option value="chinese_only" data-i18n="modeChineseOnly">仅目标语言</option>
+    </select>
+    <select id="engine-select" style="display:none;">
+      <option value="babeldoc">BabelDOC</option>
+      <option value="pdf2zh">PDFMathTranslate</option>
+      <option value="native">Native PyMuPDF</option>
+    </select>
+    <input id="pdf-pages" type="text" placeholder="页码: 1-5,8" style="width:110px; padding:7px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-family:var(--sans); background:var(--bg); color:var(--text); outline:none;" title="留空=全部页面">
+    <span class="spacer"></span>
+    <button class="btn btn-ghost btn-sm" id="btn-add-files" onclick="document.getElementById('file-input').click()" data-i18n="addFiles">+ 添加文件</button>
+    <button class="btn btn-primary" id="btn-start-all" onclick="startAllPending()" data-i18n="startAll">▶ 全部启动</button>
+    <button class="btn btn-danger" id="btn-stop-all" onclick="stopAll()" style="display:none;" data-i18n="stopAll">⏹ 全部停止</button>
+    <button class="btn btn-ghost btn-sm" id="btn-clear-done" onclick="clearDone()" style="display:none;" data-i18n="clearDone">清除已完成</button>
+  </div>
+
+  <!-- Batch Table -->
+  <div class="batch-card" id="batch-card" style="display:none;">
+    <div class="batch-header">
+      <span class="batch-title" data-i18n="batchTasks">任务列表</span>
+      <span class="batch-status idle" id="batch-status-badge" data-i18n="idle">空闲</span>
+      <span style="font-size:12px;color:var(--text2);" id="batch-summary"></span>
+      <span style="margin-left:auto;font-size:12px;color:var(--accent);font-weight:500;font-variant-numeric:tabular-nums;" id="batch-time"></span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:28px;">#</th>
+            <th style="max-width:200px;" data-i18n="colFile">文件</th>
+            <th class="hide-mobile" style="width:50px;" data-i18n="colType">类型</th>
+            <th class="hide-mobile" style="width:60px;" data-i18n="colSize">大小</th>
+            <th style="width:80px;" data-i18n="colStatus">状态</th>
+            <th style="min-width:160px;" data-i18n="colProgress">进度</th>
+            <th style="width:150px;" data-i18n="colActions">操作</th>
+          </tr>
+        </thead>
+        <tbody id="batch-tbody">
+          <tr class="empty-state"><td colspan="7">
+            <div class="icon">📂</div>
+            <p data-i18n="noTasks">上传文件开始批量翻译</p>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/settings-modal.js"></script>
+<script>
+// ── i18n ──
+const i18n = {
+  zh: {
+    menuTranslate: '翻译', menuEbook: '电子书翻译', menuEbookDesc: 'EPUB · DOCX · 文字 PDF',
+    menuBatch: '批量翻译', menuBatchDesc: '多文件上传 · 智能排队',
+    menuOcr: 'OCR 翻译', menuOcrDesc: '扫描版 PDF · AI 识别',
+    menuResources: '资源', menuGuide: '使用指南', menuGuideDesc: '快速上手指南',
+    menuGithubDesc: '开源代码仓库', navStart: '开始翻译',
+    batchTitle: '批量翻译', dropHere: '拖拽文件到此处，或点击选择',
+    supportedFormats: '支持：EPUB · DOCX · PDF（文字型）',
+    targetLang: '目标语言:', modeLabel: '模式:', modeBilingual: '双语（原文 + 译文）',
+    modeChineseOnly: '仅目标语言', startAll: '▶ 全部启动', stopAll: '⏹ 全部停止',
+    clearDone: '清除已完成', batchTasks: '任务列表', idle: '空闲', running: '运行中',
+    done: '完成', stopped: '已停止', colFile: '文件', colType: '类型', colSize: '大小',
+    colStatus: '状态', colProgress: '进度', colActions: '操作', noTasks: '上传文件开始批量翻译',
+    uploadFail: '上传失败', fileTooLarge: '文件过大', selectFile: '请选择支持的文件格式',
+    fileSizeLimit: '文件大小超出限制',
+    download: '下载', retry: '重试', retranslate: '重新翻译', start: '启动', remove: '删除',
+    addFiles: '+ 添加文件', stop: '停止', translating: '翻译中', loading: '初始化',
+    queued: '排队中', waiting: '等待中', error: '错误', starting: '启动中...',
+  },
+  en: {
+    menuTranslate: 'Translate', menuEbook: 'E-book Translation', menuEbookDesc: 'EPUB · DOCX · Text PDF',
+    menuBatch: 'Batch Translation', menuBatchDesc: 'Multi-file · Smart Queue',
+    menuOcr: 'OCR Translation', menuOcrDesc: 'Scanned PDF · AI Recognition',
+    menuResources: 'Resources', menuGuide: 'Guide', menuGuideDesc: 'Quick Start Guide',
+    menuGithubDesc: 'Open Source Repository', navStart: 'Start Translating',
+    batchTitle: 'Batch Translation', dropHere: 'Drop files here or click to browse',
+    supportedFormats: 'Supported: EPUB · DOCX · PDF (text-based)',
+    targetLang: 'Target:', modeLabel: 'Mode:', modeBilingual: 'Bilingual',
+    modeChineseOnly: 'Target Only', startAll: '▶ Start All', stopAll: '⏹ Stop All',
+    clearDone: 'Clear Done', batchTasks: 'Tasks', idle: 'Idle', running: 'Running',
+    done: 'Done', stopped: 'Stopped', colFile: 'File', colType: 'Type', colSize: 'Size',
+    colStatus: 'Status', colProgress: 'Progress', colActions: 'Actions',
+    noTasks: 'Upload files to get started', uploadFail: 'Upload failed',
+    fileTooLarge: 'File too large', selectFile: 'Please select supported formats',
+    download: 'Download', retry: 'Retry', retranslate: 'Retranslate', start: 'Start',
+    remove: 'Remove', addFiles: '+ Add Files', stop: 'Stop', translating: 'Translating',
+    loading: 'Loading', queued: 'Queued', waiting: 'Waiting', error: 'Error', starting: 'Starting...',
+  }
+};
+
+let lang = localStorage.getItem('epub-lang') || 'zh';
+function t(key) { return i18n[lang]?.[key] || i18n.zh[key] || key; }
+function applyI18n() {
+  const dict = i18n[lang] || i18n.zh;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = dict[el.getAttribute('data-i18n')] || '';
+  });
+  document.title = dict.batchTitle + ' — EbookTranslator';
+  document.querySelectorAll('.lang-option').forEach(o => {
+    o.classList.toggle('active', o.dataset.lang === lang);
+  });
+  document.getElementById('lang-btn').textContent = lang === 'zh' ? '中' : 'EN';
+  if (tasks.length > 0) renderTable();
+}
+
+function setLang(l) { lang = l; localStorage.setItem('epub-lang', l);
+  applyI18n(); toggleLangPopup(); loadLanguages(); }
+
+function toggleLangPopup() { document.getElementById('lang-popup').classList.toggle('show'); }
+function toggleDropdown(id) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const wasOpen = dd.classList.contains('open');
+  document.querySelectorAll('.nav-dropdown.open').forEach(d => d.classList.remove('open'));
+  if (!wasOpen) dd.classList.add('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.lang-btn')) document.getElementById('lang-popup').classList.remove('show');
+  if (!e.target.closest('.nav-dropdown')) {
+    document.querySelectorAll('.nav-dropdown.open').forEach(d => d.classList.remove('open'));
+  }
+});
+
+// ── State ──
+let tasks = [];
+let runningCount = 0;
+let MAX_CONCURRENT = 1;       // updated from config in checkConfig()
+let maxUploadSizeMB = 500;    // updated from config in checkConfig()
+let batchStartTime = 0;       // elapsed timer start
+let batchTimerInterval = null;
+
+// ── Task persistence (localStorage) ────────────────────────────────
+const STORAGE_KEY = 'et-batch-tasks';
+
+function saveBatchTasks() {
+  // Only persist tasks that aren't done (done tasks get cleared on refresh)
+  const toSave = tasks
+    .filter(t => t.status !== 'done')
+    .map(t => ({
+      task_id: t.task_id, filename: t.filename,
+      file_type: t.file_type, file_size: t.file_size,
+      status: t.status, step: t.step || '',
+      file_progress: t.file_progress || 0, file_total: t.file_total || 0,
+      output: t.output || null, error: t.error || null,
+      start_time: t.start_time || 0,  // preserve for accurate elapsed time on resume
+      timestamp: Date.now()
+    }));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave)); } catch(e) {}
+}
+
+function loadBatchTasks() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const saved = JSON.parse(raw);
+    // Expire saved tasks older than 24 hours
+    if (saved.length > 0 && Date.now() - (saved[0].timestamp || 0) > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(STORAGE_KEY);
+      return [];
+    }
+    return saved.map(t => ({ ...t, sse: null }));
+  } catch(e) { return []; }
+}
+
+function clearBatchTasks() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+}
+
+// ── Config & Lang ──
+function checkConfig() {
+  fetch('/api/config').then(r => r.json()).then(c => {
+    if (c.max_file_size_mb) maxUploadSizeMB = c.max_file_size_mb;
+    if (c.max_concurrent_tasks) MAX_CONCURRENT = c.max_concurrent_tasks;
+    if (!c.api_key_set) openSettings();
+    // After config check, try to resume saved tasks
+    tryResumeBatchTasks();
+  }).catch(() => {});
+}
+
+// ── Resume saved batch tasks after page navigation ─────────────────
+async function tryResumeBatchTasks() {
+  const saved = loadBatchTasks();
+  if (!saved.length) return;
+
+  showBatchCard();
+  tasks = saved;
+  renderTable();
+  updateUIState();
+
+  // Fetch current status for each task from backend and reconnect SSE for running ones
+  for (const task of tasks) {
+    try {
+      const r = await fetch('/api/task/' + task.task_id);
+      if (!r.ok) {
+        // Task no longer exists on server — mark as error
+        task.status = 'error';
+        task.error = 'Task expired (server restarted)';
+        updateRow(task);
+        continue;
+      }
+      const serverState = await r.json();
+      const newStatus = serverState.status || '';
+
+      // Update task state from server
+      task.status = newStatus || task.status;
+      task.step = serverState.step || task.step;
+      task.file_progress = serverState.file_progress || task.file_progress;
+      task.file_total = serverState.file_total || task.file_total;
+      task.output = serverState.output || task.output;
+      task.error = serverState.error || task.error;
+
+      updateRow(task);
+
+      // Reconnect SSE for running tasks
+      if (newStatus === 'translating' || newStatus === 'loading' || newStatus === 'queued') {
+        runningCount++;
+        monitorTask(task);
+      }
+    } catch (err) {
+      task.status = 'error';
+      task.error = 'Failed to restore task';
+      updateRow(task);
+    }
+  }
+
+  updateUIState();
+  if (runningCount > 0) processQueue();
+  saveBatchTasks(); // Clean up done/errored from storage
+}
+function loadLanguages() {
+  fetch('/api/languages?ui=' + lang).then(r => r.json()).then(data => {
+    const sel = document.getElementById('lang-select');
+    sel.innerHTML = '';
+    data.forEach(l => { const o = document.createElement('option');
+      o.value = l.code; o.textContent = l.name;
+      if (l.code === 'zh-CN') o.selected = true; sel.appendChild(o); });
+  }).catch(() => {});
+}
+
+// ── Upload ──
+const uz = document.getElementById('upload-zone');
+['dragenter','dragover'].forEach(e => uz.addEventListener(e, ev => {
+  ev.preventDefault(); uz.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(e => uz.addEventListener(e, ev => {
+  ev.preventDefault(); uz.classList.remove('dragover');
+}));
+uz.addEventListener('drop', ev => {
+  if (ev.dataTransfer.files.length) handleBatchFiles(ev.dataTransfer.files);
+});
+
+async function handleBatchFiles(fileList) {
+  const files = Array.from(fileList);
+  const validExts = ['.epub','.docx','.pdf'];
+  const validFiles = files.filter(f => {
+    const ext = '.' + f.name.toLowerCase().split('.').pop();
+    if (!validExts.includes(ext)) { toast(f.name + ': ' + t('selectFile'), 'error'); return false; }
+    if (f.size > maxUploadSizeMB * 1024 * 1024) { toast(f.name + ': ' + t('fileTooLarge') + ' (' + maxUploadSizeMB + ' MB)', 'error'); return false; }
+    return true;
+  });
+  if (!validFiles.length) return;
+
+  const queue = document.getElementById('upload-queue');
+  queue.style.display = '';
+  showBatchCard();
+
+  for (const file of validFiles) {
+    const item = document.createElement('div');
+    item.className = 'upload-queue-item';
+    item.id = 'up-' + file.name.replace(/[^a-zA-Z0-9]/g, '_');
+    item.innerHTML = `
+      <span style="font-size:18px;">📄</span>
+      <span class="fname">${file.name}</span>
+      <span class="fsize">${fmtSize(file.size)}</span>
+      <div class="mini-bar"><div class="mini-bar-fill" style="width:0%"></div></div>
+      <span class="ustatus">0%</span>`;
+    queue.appendChild(item);
+
+    try {
+      const taskInfo = await uploadFile(file, item);
+      tasks.push(taskInfo);
+      saveBatchTasks();
+      item.querySelector('.ustatus').textContent = '✓';
+      item.querySelector('.ustatus').classList.add('ok');
+      item.querySelector('.mini-bar-fill').style.width = '100%';
+      renderTable();
+      // Auto-start this task immediately after upload
+      startSingleTask(taskInfo.task_id);
+    } catch (err) {
+      item.querySelector('.ustatus').textContent = '✗';
+      item.querySelector('.ustatus').classList.add('fail');
+      toast(file.name + ': ' + (err.message || t('uploadFail')), 'error');
+    }
+  }
+
+  setTimeout(() => { queue.style.display = 'none'; queue.innerHTML = ''; }, 2000);
+}
+
+function uploadFile(file, itemEl) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData(); fd.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload');
+    xhr.timeout = 180000;
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        itemEl.querySelector('.mini-bar-fill').style.width = pct + '%';
+        itemEl.querySelector('.ustatus').textContent = pct + '%';
+      }
+    });
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        resolve({
+          task_id: data.task_id, filename: data.filename,
+          file_type: data.file_type, file_size: file.size,
+          status: 'waiting', step: '', file_progress: 0, file_total: 0,
+          output: null, error: null, sse: null,
+        });
+      } else {
+        reject(new Error('Upload failed (status ' + xhr.status + ')'));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.ontimeout = () => reject(new Error('Upload timeout'));
+    xhr.send(fd);
+  });
+}
+
+// ── Table Rendering ──
+function showBatchCard() {
+  document.getElementById('batch-card').style.display = '';
+  document.getElementById('btn-clear-done').style.display = '';
+  document.getElementById('btn-start-all').disabled = false;
+}
+
+function renderTable() {
+  const tbody = document.getElementById('batch-tbody');
+  if (!tasks.length) {
+    tbody.innerHTML = `<tr class="empty-state"><td colspan="7"><div class="icon">📂</div><p>${t('noTasks')}</p></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = tasks.map((task, i) => buildRowHTML(task, i)).join('');
+}
+
+function buildRowHTML(task, i) {
+  const status = task.status || 'waiting';
+  const fp = task.file_progress || 0;
+  const ft = task.file_total || 0;
+  const pct = ft > 0 ? Math.round(fp / ft * 100) : 0;
+  const isRunning = status === 'translating' || status === 'loading' || status === 'queued';
+  const badgeClass = status === 'done' ? 'badge-done' :
+    isRunning ? 'badge-running' :
+    status === 'error' ? 'badge-error' :
+    status === 'stopped' ? 'badge-stopped' : 'badge-waiting';
+  const statusText = task.step || t(status) || status;
+  const typeLabel = (task.file_type || '').replace('.','').toUpperCase();
+  const fname = task.filename || '';
+
+  // ── Action buttons per status ──
+  let actions = '';
+  if (status === 'done') {
+    actions = `<button class="btn btn-download btn-sm" onclick="downloadTask('${task.task_id}')">${t('download')}</button>
+               <button class="btn btn-primary btn-sm" onclick="retranslateTask('${task.task_id}')">${t('retranslate')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  } else if (isRunning) {
+    actions = `<button class="btn btn-danger btn-sm" onclick="stopSingleTask('${task.task_id}')">⏹ ${t('stop')}</button>`;
+  } else if (status === 'error') {
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('retry')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  } else if (status === 'stopped') {
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  } else {
+    // waiting
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  }
+
+  // ── Progress ──
+  let progressHTML = '';
+  if (status === 'done') {
+    const doneTime = task.start_time ? fmtTime((Date.now() - task.start_time) / 1000) : '';
+    progressHTML = `<span style="font-size:11px;color:var(--green);">✓ ${t('done')}</span>${doneTime ? ' <span style="font-size:10px;color:var(--text2);">' + doneTime + '</span>' : ''}`;
+  } else if (isRunning) {
+    const t0 = task.start_time || Date.now();
+    const elapsed = fmtTime((Date.now() - t0) / 1000);
+    progressHTML = `<div class="row-progress-bar"><div class="row-bar"><div class="row-bar-fill" style="width:${pct}%;"></div></div><span class="row-pct">${pct}%</span></div>
+      <div class="row-step">${statusText}</div>
+      <div class="row-time" data-start="${t0}">${elapsed}</div>`;
+  } else if (status === 'error') {
+    progressHTML = `<span style="font-size:11px;color:var(--red);" title="${(task.error||'').replace(/"/g,'&quot;')}">${(task.error||t('error')).substring(0,40)}</span>`;
+  } else {
+    progressHTML = `<span style="font-size:11px;color:var(--text2);">—</span>`;
+  }
+
+  return `<tr id="row-${task.task_id}">
+    <td>${i + 1}</td>
+    <td title="${fname}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">${fname}</td>
+    <td class="hide-mobile" style="font-size:11px;">${typeLabel}</td>
+    <td class="hide-mobile" style="font-size:11px;">${fmtSize(task.file_size||0)}</td>
+    <td><span class="badge ${badgeClass}">${statusText}</span></td>
+    <td>${progressHTML}</td>
+    <td><div class="actions-cell">${actions}</div></td>
+  </tr>`;
+}
+
+function updateRow(task) {
+  const row = document.getElementById('row-' + task.task_id);
+  if (!row) { renderTable(); return; }
+  const idx = tasks.findIndex(t => t.task_id === task.task_id);
+  const status = task.status || 'waiting';
+  const fp = task.file_progress || 0;
+  const ft = task.file_total || 0;
+  const pct = ft > 0 ? Math.round(fp / ft * 100) : 0;
+  const isRunning = status === 'translating' || status === 'loading' || status === 'queued';
+  const badgeClass = status === 'done' ? 'badge-done' :
+    isRunning ? 'badge-running' :
+    status === 'error' ? 'badge-error' :
+    status === 'stopped' ? 'badge-stopped' : 'badge-waiting';
+  const statusText = task.step || t(status) || status;
+
+  row.cells[0].textContent = idx >= 0 ? idx + 1 : '';
+  row.cells[1].textContent = (task.filename||'').length > 35 ? (task.filename||'').substring(0,35)+'…' : (task.filename||'');
+  row.cells[1].title = task.filename||'';
+  row.cells[2].textContent = (task.file_type||'').replace('.','').toUpperCase();
+  row.cells[3].textContent = fmtSize(task.file_size||0);
+  const badge = row.cells[4].querySelector('.badge');
+  if (badge) { badge.className = 'badge ' + badgeClass; badge.textContent = statusText; }
+
+  // Progress
+  if (status === 'done') {
+    const doneTime = task.start_time ? fmtTime((Date.now() - task.start_time) / 1000) : '';
+    row.cells[5].innerHTML = `<span style="font-size:11px;color:var(--green);">✓ ${t('done')}</span>${doneTime ? ' <span style="font-size:10px;color:var(--text2);">' + doneTime + '</span>' : ''}`;
+  } else if (isRunning) {
+    const t0 = task.start_time || Date.now();
+    const elapsed = fmtTime((Date.now() - t0) / 1000);
+    row.cells[5].innerHTML = `<div class="row-progress-bar"><div class="row-bar"><div class="row-bar-fill" style="width:${pct}%;"></div></div><span class="row-pct">${pct}%</span></div>
+      <div class="row-step">${statusText}</div>
+      <div class="row-time" data-start="${t0}">${elapsed}</div>`;
+  } else if (status === 'error') {
+    row.cells[5].innerHTML = `<span style="font-size:11px;color:var(--red);" title="${(task.error||'').replace(/"/g,'&quot;')}">${(task.error||t('error')).substring(0,40)}</span>`;
+  } else {
+    row.cells[5].innerHTML = `<span style="font-size:11px;color:var(--text2);">—</span>`;
+  }
+
+  // Actions
+  let actions = '';
+  if (status === 'done') {
+    actions = `<button class="btn btn-download btn-sm" onclick="downloadTask('${task.task_id}')">${t('download')}</button>
+               <button class="btn btn-primary btn-sm" onclick="retranslateTask('${task.task_id}')">${t('retranslate')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  } else if (isRunning) {
+    actions = `<button class="btn btn-danger btn-sm" onclick="stopSingleTask('${task.task_id}')">⏹ ${t('stop')}</button>`;
+  } else if (status === 'error') {
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('retry')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  } else if (status === 'stopped') {
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  } else {
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+  }
+  row.cells[6].querySelector('.actions-cell').innerHTML = actions;
+}
+
+// ── Single Task Control ──
+
+function getStartEndpoint(fileType) {
+  if (fileType === '.pdf') return '/api/start_babeldoc';
+  return '/api/start';
+}
+
+async function startSingleTask(taskId) {
+  const task = tasks.find(t => t.task_id === taskId);
+  if (!task) return;
+  // Guard: already running or queued (SSE is monitoring)
+  if (task.status === 'translating' || task.status === 'loading' || task.status === 'queued') return;
+
+  task.status = 'loading';
+  task.step = t('starting');
+  task.error = null;
+  task.file_progress = 0;
+  task.file_total = 0;
+  task.start_time = task.start_time || Date.now();  // record start for elapsed time
+  runningCount++;
+  updateRow(task);
+  updateUIState();
+
+  const targetLang = document.getElementById('lang-select').value || 'zh-CN';
+  const bilingual = document.getElementById('mode-select').value === 'bilingual';
+  const pages = document.getElementById('pdf-pages').value.trim() || null;
+  const endpoint = getStartEndpoint(task.file_type);
+
+  try {
+    const r = await fetch(endpoint + '/' + task.task_id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_lang: targetLang,
+        bilingual: bilingual,
+        pdf_method: document.getElementById('engine-select').value || 'babeldoc',
+        ...(pages && {pages: pages}),
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: 'Failed to start' }));
+      throw new Error(err.detail || 'Failed to start');
+    }
+    monitorTask(task);
+  } catch (err) {
+    task.status = 'error';
+    task.error = err.message;
+    runningCount = Math.max(0, runningCount - 1);
+    updateRow(task);
+    updateUIState();
+    processQueue();
+  }
+}
+
+function monitorTask(task) {
+  // Close existing SSE if any
+  if (task.sse) { task.sse.close(); task.sse = null; }
+
+  const es = new EventSource('/api/progress/' + task.task_id);
+  task.sse = es;
+  let sseErrorCount = 0;
+
+  es.onmessage = (e) => {
+    sseErrorCount = 0;  // reset on successful message
+    const data = JSON.parse(e.data);
+
+    // Never downgrade from a running status to a "queued" status —
+    // this prevents the SSE from overwriting our local "loading" state
+    // with the server's "queued" state during the race window.
+    const serverStatus = data.status || '';
+    const isRunning = task.status === 'loading' || task.status === 'translating';
+    const isQueuedDowngrade = serverStatus === 'queued';
+    if (!isRunning || !isQueuedDowngrade) {
+      task.status = serverStatus || task.status;
+    }
+    task.step = data.step || '';
+    task.file_progress = data.file_progress || 0;
+    task.file_total = data.file_total || 0;
+    task.output = data.output || task.output;
+    task.error = data.error || task.error;
+
+    updateRow(task);
+    updateUIState();
+
+    if (serverStatus === 'done' || serverStatus === 'error' || serverStatus === 'stopped') {
+      es.close();
+      task.sse = null;
+      if (serverStatus !== 'stopped') runningCount = Math.max(0, runningCount - 1);
+      updateRow(task);
+      updateUIState();
+      saveBatchTasks();
+      processQueue();
+    }
+  };
+
+  es.onerror = () => {
+    sseErrorCount++;
+    // EventSource auto-reconnects; only give up after 5 consecutive errors
+    if (sseErrorCount < 5) return;
+
+    es.close();
+    task.sse = null;
+    // Handle ALL non-terminal stuck states, not just 'loading'
+    if (task.status !== 'done' && task.status !== 'error' && task.status !== 'stopped') {
+      task.status = 'error';
+      task.error = 'Connection lost (SSE disconnected)';
+      runningCount = Math.max(0, runningCount - 1);
+      updateRow(task);
+      updateUIState();
+      saveBatchTasks();
+      processQueue();
+    }
+  };
+}
+
+async function stopSingleTask(taskId) {
+  // Immediately call stop API + close SSE
+  fetch('/api/stop/' + taskId, { method: 'POST' }).catch(() => {});
+  const task = tasks.find(t => t.task_id === taskId);
+  if (task) {
+    if (task.sse) { task.sse.close(); task.sse = null; }
+    task.status = 'stopped';
+    runningCount = Math.max(0, runningCount - 1);
+    updateRow(task);
+    updateUIState();
+    saveBatchTasks();
+    processQueue();
+  }
+}
+
+async function retranslateTask(taskId) {
+  // Reset a done task and start over
+  const task = tasks.find(t => t.task_id === taskId);
+  if (!task) return;
+  task.status = 'waiting';
+  task.step = '';
+  task.file_progress = 0;
+  task.file_total = 0;
+  task.error = null;
+  task.output = null;
+  saveBatchTasks();
+  renderTable();
+  startSingleTask(taskId);
+}
+
+function downloadTask(taskId) {
+  window.location.href = '/api/download/' + taskId;
+}
+
+function removeTask(taskId) {
+  const task = tasks.find(t => t.task_id === taskId);
+  if (task && task.sse) { task.sse.close(); task.sse = null; }
+  if (task && (task.status === 'translating' || task.status === 'loading' || task.status === 'queued')) {
+    fetch('/api/stop/' + taskId, { method: 'POST' }).catch(() => {});
+    runningCount = Math.max(0, runningCount - 1);
+  }
+  tasks = tasks.filter(t => t.task_id !== taskId);
+  saveBatchTasks();
+  renderTable();
+  updateUIState();
+  if (tasks.length === 0) hideBatchCard();
+  processQueue();
+}
+
+// ── Batch Controls ──
+
+function startAllPending() {
+  // Only start tasks that are not already done, running, or queued
+  const toStart = tasks.filter(t =>
+    t.status !== 'done' && t.status !== 'translating' && t.status !== 'loading' && t.status !== 'queued'
+  );
+  if (toStart.length === 0) {
+    toast(t('done'), 'success');
+    return;
+  }
+  // Set all non-done to waiting
+  toStart.forEach(t => { t.status = 'waiting'; t.error = null; });
+  renderTable();
+  updateUIState();
+  // Fire first one, queue will cascade
+  processQueue();
+}
+
+function processQueue() {
+  const waiting = tasks.filter(t => t.status === 'waiting');
+  if (waiting.length === 0) {
+    const hasDone = tasks.some(t => t.status === 'done');
+    if (hasDone && runningCount === 0) {
+      // All done or stopped
+      updateUIState();
+    }
+    return;
+  }
+
+  while (runningCount < MAX_CONCURRENT && waiting.length > 0) {
+    const next = waiting.shift();
+    if (next) startSingleTask(next.task_id);
+  }
+}
+
+async function stopAll() {
+  // Stop all running/queued tasks immediately
+  const promises = [];
+  for (const task of tasks) {
+    if (task.status === 'translating' || task.status === 'loading' || task.status === 'queued') {
+      promises.push(fetch('/api/stop/' + task.task_id, { method: 'POST' }).catch(() => {}));
+      if (task.sse) { task.sse.close(); task.sse = null; }
+      task.status = 'stopped';
+    }
+    if (task.status === 'waiting') {
+      task.status = 'stopped';
+    }
+  }
+  await Promise.all(promises);
+  runningCount = 0;
+  renderTable();
+  updateUIState();
+}
+
+function clearDone() {
+  tasks = tasks.filter(t => t.status !== 'done');
+  saveBatchTasks();
+  renderTable();
+  updateUIState();
+  if (tasks.length === 0) hideBatchCard();
+}
+
+// ── Batch Timer ─────────────────────────────────────────────────
+function fmtTime(s) { if (s<60) return Math.round(s)+'s'; return Math.floor(s/60)+'m '+Math.round(s%60)+'s'; }
+
+function startBatchTimer() {
+  if (batchTimerInterval) return;
+  batchStartTime = Date.now();
+  document.getElementById('batch-time').textContent = '0s';
+  batchTimerInterval = setInterval(() => {
+    document.getElementById('batch-time').textContent = fmtTime((Date.now() - batchStartTime) / 1000);
+    // Update per-row elapsed times
+    document.querySelectorAll('.row-time').forEach(el => {
+      const start = parseInt(el.dataset.start);
+      if (start) el.textContent = fmtTime((Date.now() - start) / 1000);
+    });
+  }, 1000);
+}
+
+function stopBatchTimer() {
+  if (batchTimerInterval) { clearInterval(batchTimerInterval); batchTimerInterval = null; }
+  document.getElementById('batch-time').textContent = '';
+}
+
+// ── UI State ──
+function updateUIState() {
+  const done = tasks.filter(t => t.status === 'done').length;
+  const running = tasks.filter(t => t.status === 'translating' || t.status === 'loading' || t.status === 'queued').length;
+  const waiting = tasks.filter(t => t.status === 'waiting').length;
+  const hasRunning = running > 0;
+  const hasWaiting = waiting > 0;
+
+  document.getElementById('batch-summary').textContent =
+    `${done}/${tasks.length} ${t('done')} · ${running} ${t('running')} · ${waiting} ${t('waiting')}`;
+
+  if (hasRunning || hasWaiting) {
+    startBatchTimer();
+    document.getElementById('btn-stop-all').style.display = '';
+    document.getElementById('btn-start-all').style.display = 'none';
+    document.getElementById('batch-status-badge').textContent = t('running');
+    document.getElementById('batch-status-badge').className = 'batch-status running';
+  } else {
+    stopBatchTimer();
+    document.getElementById('btn-stop-all').style.display = 'none';
+    document.getElementById('btn-start-all').style.display = '';
+    document.getElementById('btn-start-all').disabled = tasks.length === 0;
+    const allDone = tasks.length > 0 && tasks.every(t => t.status === 'done');
+    document.getElementById('batch-status-badge').textContent = allDone ? t('done') : t('idle');
+    document.getElementById('batch-status-badge').className = allDone ? 'batch-status done' : 'batch-status idle';
+  }
+}
+
+function hideBatchCard() {
+  document.getElementById('batch-card').style.display = 'none';
+  document.getElementById('btn-clear-done').style.display = 'none';
+  document.getElementById('btn-stop-all').style.display = 'none';
+  document.getElementById('btn-start-all').style.display = '';
+  document.getElementById('btn-start-all').disabled = true;
+}
+
+// ── Helpers ──
+function fmtSize(bytes) {
+  if (!bytes || bytes < 1024) return (bytes||0) + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes/1048576).toFixed(1) + ' MB';
+  return (bytes/1073741824).toFixed(2) + ' GB';
+}
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast' + (type === 'success' ? ' toast-success' : '') + (type === 'error' ? ' toast-error' : '');
+  setTimeout(() => el.classList.add('show'), 10);
+  clearTimeout(el._timeout);
+  el._timeout = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  if (!localStorage.getItem('epub-lang')) {
+    lang = (navigator.language||'').startsWith('zh') ? 'zh' : 'en';
+    localStorage.setItem('epub-lang', lang);
+  }
+  applyI18n();
+  checkConfig();
+  loadLanguages();
+});
+</script>
+</body>
+</html>

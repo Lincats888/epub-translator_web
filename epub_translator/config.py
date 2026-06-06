@@ -21,6 +21,9 @@ DEFAULT_CONFIG = {
     "ocr_api_key": "",
     "ocr_api_base": "https://api.siliconflow.com",
     "ocr_model": "Qwen/Qwen3-VL-32B-Instruct",
+    # General settings
+    "max_file_size_mb": 500,
+    "max_concurrent_tasks": 1,
 }
 
 
@@ -128,3 +131,13 @@ class Config:
     def ocr_model(self) -> str:
         val = self._data.get("ocr_model", "")
         return val if val else "Qwen/Qwen3-VL-32B-Instruct"
+
+    # ── General settings ─────────────────────────────────────────────
+
+    @property
+    def max_file_size_mb(self) -> int:
+        return int(self._data.get("max_file_size_mb", 500))
+
+    @property
+    def max_concurrent_tasks(self) -> int:
+        return int(self._data.get("max_concurrent_tasks", 1))

@@ -316,9 +316,9 @@
     <a href="/guide" class="icon-btn" title="User Guide" style="text-decoration:none;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
     </a>
-    <a href="/?settings=open" class="icon-btn" title="Settings" style="text-decoration:none;">
+    <span class="icon-btn" title="Settings" onclick="openSettings()" style="cursor:pointer;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-    </a>
+    </span>
   </header>
 
   <input type="file" id="file-input" accept=".epub,.docx,.pdf" style="display:none" onchange="handleFile(this.files[0])">
@@ -384,6 +384,10 @@
             <option value="pdf2zh">数学公式排版</option>
             <option value="native">普通排版</option>
           </select>
+          <span id="pages-wrap" style="display:none;">
+            <span style="font-size:13px; color:var(--text2); margin:0 4px;">📄</span>
+            <input id="pdf-pages" type="text" placeholder="1-5,8,10-12" style="width:130px; padding:6px 10px; border:1px solid var(--border); border-radius:8px; font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--text); outline:none;" title="留空=全部页面">
+          </span>
         </div>
         <div class="scanned-badge" id="scanned-badge" data-i18n="scannedBadge"></div>
         <div class="book-actions">
@@ -425,6 +429,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="/settings-modal.js"></script>
 <script>
 // ── i18n ───────────────────────────────────────────────────────────
 // Language is set on the homepage and stored in localStorage.
@@ -528,6 +533,38 @@ function applyLang() {
 // ── State ─────────────────────────────────────────────────────────
 let taskId = null, eventSource = null, timerInterval = null, startTime = 0;
 let apiKeyReady = false;
+let maxFileSizeMB = 500;  // from config, updated in checkConfig()
+
+// ── Task persistence (localStorage) ────────────────────────────────
+const STORAGE_KEY = 'et-current-task';
+
+function saveTaskToStorage(data, fileSize) {
+  const toSave = {
+    taskId: data.task_id,
+    filename: data.filename,
+    title: data.title || data.filename,
+    author: data.author || '',
+    cover: data.cover || null,
+    toc: data.toc || [],
+    fileType: data.file_type || '',
+    fileSize: fileSize,
+    isScanned: data.is_scanned || false,
+    timestamp: Date.now()
+  };
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave)); } catch(e) {}
+}
+
+function loadTaskFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function clearTaskFromStorage() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+}
 
 // ── Preview State ─────────────────────────────────────────────────
 let previewOpen = false;
@@ -559,15 +596,86 @@ function loadLanguages() {
 // ── Config ────────────────────────────────────────────────────────
 function checkConfig() {
   fetch('/api/config').then(r=>r.json()).then(c => {
+    if (c.max_file_size_mb) maxFileSizeMB = c.max_file_size_mb;
     if (c.api_key_set) {
       apiKeyReady = true;
       document.getElementById('btn-open-book').disabled = false;
+      // After config check, try to resume any saved task
+      tryResumeTask();
     } else {
       apiKeyReady = false;
       document.getElementById('btn-open-book').disabled = true;
-      window.location.href = '/?settings=open';
+      openSettings();
     }
   }).catch(()=>{});
+}
+
+// ── Resume saved task after page navigation ────────────────────────
+function tryResumeTask() {
+  const saved = loadTaskFromStorage();
+  if (!saved || !saved.taskId) return;
+
+  // Expire saved tasks older than 24 hours
+  if (Date.now() - saved.timestamp > 24 * 60 * 60 * 1000) {
+    clearTaskFromStorage();
+    return;
+  }
+
+  // Fetch current task status from backend
+  fetch('/api/task/' + saved.taskId)
+    .then(r => {
+      if (!r.ok) { clearTaskFromStorage(); return null; }
+      return r.json();
+    })
+    .then(task => {
+      if (!task) return;
+
+      taskId = saved.taskId;
+
+      // Restore file type info
+      currentFileType = saved.fileType;
+      epubToc = saved.toc || [];
+      epubCover = saved.cover || null;
+
+      // Restore UI — show book view
+      showBook({
+        task_id: saved.taskId,
+        filename: saved.filename,
+        title: saved.title,
+        author: saved.author,
+        cover: saved.cover,
+        toc: saved.toc,
+        file_type: saved.fileType,
+        is_scanned: saved.isScanned
+      }, saved.fileSize);
+
+      // Handle based on current status
+      if (task.status === 'translating' || task.status === 'loading' || task.status === 'queued') {
+        // Reconnect SSE to show live progress
+        startProgress();
+        // Update progress bar with current state
+        if (task.file_progress !== undefined) {
+          const done = task.file_progress || 0;
+          const total = task.file_total || 100;
+          const pct = total > 0 ? Math.round(done / total * 100) : 0;
+          document.getElementById('progress-fill').style.width = pct + '%';
+          document.getElementById('progress-pct').textContent = pct + '%';
+          document.getElementById('progress-label').textContent = task.step || t('translating');
+          document.getElementById('progress-files').innerHTML = `${done} / ${total}`;
+        }
+        showStopButton();
+        document.getElementById('progress-bar').classList.add('active');
+        toast(lang === 'zh' ? '已恢复翻译进度' : 'Translation progress restored', 'success');
+      } else if (task.status === 'done') {
+        showDownloadButton();
+      } else if (task.status === 'error') {
+        showStartButton();
+        toast((lang === 'zh' ? '翻译失败：' : 'Failed: ') + (task.error || ''), 'error');
+      } else if (task.status === 'stopped') {
+        showStartButton();
+      }
+    })
+    .catch(() => { clearTaskFromStorage(); });
 }
 
 // ── Upload ────────────────────────────────────────────────────────
@@ -613,7 +721,14 @@ function handleFile(file) {
   if (!file) return;
   const ext = file.name.toLowerCase().split('.').pop();
   if (!['epub','docx','pdf'].includes(ext)) { toast(t('selectFile'),'error'); return; }
-  if (file.size > 100*1024*1024) { toast(t('fileTooLarge'),'error'); return; }
+  if (file.size > maxFileSizeMB * 1024 * 1024) { toast(t('fileTooLarge') + ' (' + maxFileSizeMB + ' MB)', 'error'); return; }
+
+  // Clear previous task state and SSE
+  clearTaskFromStorage();
+  taskId = null;
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  document.getElementById('progress-bar').classList.remove('active');
 
   // Reset preview
   const panel = document.getElementById('preview-panel');
@@ -646,6 +761,8 @@ function handleFile(file) {
         const data = JSON.parse(xhr.responseText);
         if (data.detail) { toast(data.detail,'error'); return; }
         taskId = data.task_id;
+        clearTaskFromStorage();
+        saveTaskToStorage(data, file.size);
         showBook(data, file.size);
         toast(t('bookLoaded'),'');
       } catch (e) { toast(t('uploadFail')+e.message,'error'); }
@@ -681,6 +798,8 @@ function showBook(data, fileSize) {
   const isEpub = data.filename && data.filename.toLowerCase().endsWith('.epub');
   const isDocx = data.filename && data.filename.toLowerCase().endsWith('.docx');
   document.getElementById('trans-engine').style.display = isPdf ? '' : 'none';
+  document.getElementById('pages-wrap').style.display = isPdf ? '' : 'none';
+  document.getElementById('pdf-pages').value = '';  // reset on new file
   document.getElementById('book-size').innerHTML = '<strong>' + fmtSize(fileSize) + '</strong>';
   document.getElementById('book-date').innerHTML = '<strong>' + new Date().toLocaleDateString() + '</strong>';
 
@@ -738,11 +857,16 @@ function toggleTranslation() {
     const targetLang = document.getElementById('target-lang').value;
     const transMode = document.getElementById('trans-mode').value;
     const engine = document.getElementById('trans-engine').value;
+    const pages = document.getElementById('pdf-pages').value.trim() || null;
     const isBabeldoc = (engine === 'babeldoc');
     const apiRoute = isBabeldoc ? `/api/start_babeldoc/${taskId}` : `/api/start/${taskId}`;
-    const bodyData = isBabeldoc
-      ? JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual', ui_lang: lang})
-      : JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual', pdf_method: engine});
+    const bodyData = JSON.stringify({
+      target_lang: targetLang,
+      bilingual: transMode === 'bilingual',
+      pdf_method: engine,
+      ...(isBabeldoc && {ui_lang: lang}),
+      ...(pages && {pages: pages}),
+    });
     fetch(apiRoute,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
