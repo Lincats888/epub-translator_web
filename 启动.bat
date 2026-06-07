@@ -17,7 +17,7 @@ if errorlevel 1 (
 )
 
 echo  [1/5] Checking dependencies...
-pip install -q fastapi uvicorn[standard] python-multipart openai pyyaml beautifulsoup4 lxml tqdm 2>nul
+pip install -q fastapi "uvicorn[standard]" python-multipart openai pyyaml beautifulsoup4 lxml tqdm cryptography langdetect python-docx "PyMuPDF>=1.24.0" easyocr opencv-python numpy Pillow 2>nul
 
 echo  [2/5] Setting up BabelDOC engine...
 python -c "import babeldoc" 2>nul

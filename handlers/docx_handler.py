@@ -110,7 +110,7 @@ class DocxHandler(BaseHandler):
     def supported_extensions():
         return [".docx"]
 
-    def extract(self, file_path, skip_tags=None, bilingual=True):
+    def extract(self, file_path, skip_tags=None, bilingual=True, **kwargs):
         """Extract all translatable content: paragraphs, headings, TOC entries, table cells."""
         docx = _get_docx()
         doc = docx.Document(file_path)

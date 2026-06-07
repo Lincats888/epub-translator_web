@@ -302,6 +302,15 @@
   <!-- Upload Queue -->
   <div class="upload-queue" id="upload-queue" style="display:none;"></div>
 
+  <!-- Date Tabs -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px;" id="date-tabs">
+    <span class="date-tab active" data-date="" onclick="switchDate(null)" style="cursor:pointer;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;white-space:nowrap;transition:all 0.15s;border:1px solid transparent;background:var(--accent-light);color:var(--accent);" data-i18n="todayTab">今天</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+    <input id="search-input" type="text" placeholder="搜索文件名..." onkeydown="if(event.key==='Enter')searchHistory()" style="flex:1;max-width:300px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--text);outline:none;">
+    <button class="btn btn-ghost btn-sm" onclick="searchHistory()" style="padding:7px 14px;">🔍</button>
+  </div>
+
   <!-- Controls Bar -->
   <div class="controls-bar" id="controls-bar">
     <label data-i18n="targetLang">目标语言:</label>
@@ -340,6 +349,8 @@
             <th style="max-width:200px;" data-i18n="colFile">文件</th>
             <th class="hide-mobile" style="width:50px;" data-i18n="colType">类型</th>
             <th class="hide-mobile" style="width:60px;" data-i18n="colSize">大小</th>
+            <th class="hide-mobile" style="width:70px;" data-i18n="colLang">语言</th>
+            <th class="hide-mobile" style="width:70px;" data-i18n="colMode">模式</th>
             <th style="width:80px;" data-i18n="colStatus">状态</th>
             <th style="min-width:160px;" data-i18n="colProgress">进度</th>
             <th style="width:150px;" data-i18n="colActions">操作</th>
@@ -375,12 +386,14 @@ const i18n = {
     modeChineseOnly: '仅目标语言', startAll: '▶ 全部启动', stopAll: '⏹ 全部停止',
     clearDone: '清除已完成', batchTasks: '任务列表', idle: '空闲', running: '运行中',
     done: '完成', stopped: '已停止', colFile: '文件', colType: '类型', colSize: '大小',
+    colLang: '语言', colMode: '模式',
     colStatus: '状态', colProgress: '进度', colActions: '操作', noTasks: '上传文件开始批量翻译',
     uploadFail: '上传失败', fileTooLarge: '文件过大', selectFile: '请选择支持的文件格式',
     fileSizeLimit: '文件大小超出限制',
     download: '下载', retry: '重试', retranslate: '重新翻译', start: '启动', remove: '删除',
     addFiles: '+ 添加文件', stop: '停止', translating: '翻译中', loading: '初始化',
     queued: '排队中', waiting: '等待中', error: '错误', starting: '启动中...',
+    todayTab: '今天',
   },
   en: {
     menuTranslate: 'Translate', menuEbook: 'E-book Translation', menuEbookDesc: 'EPUB · DOCX · Text PDF',
@@ -394,12 +407,14 @@ const i18n = {
     modeChineseOnly: 'Target Only', startAll: '▶ Start All', stopAll: '⏹ Stop All',
     clearDone: 'Clear Done', batchTasks: 'Tasks', idle: 'Idle', running: 'Running',
     done: 'Done', stopped: 'Stopped', colFile: 'File', colType: 'Type', colSize: 'Size',
+    colLang: 'Lang', colMode: 'Mode',
     colStatus: 'Status', colProgress: 'Progress', colActions: 'Actions',
     noTasks: 'Upload files to get started', uploadFail: 'Upload failed',
     fileTooLarge: 'File too large', selectFile: 'Please select supported formats',
     download: 'Download', retry: 'Retry', retranslate: 'Retranslate', start: 'Start',
     remove: 'Remove', addFiles: '+ Add Files', stop: 'Stop', translating: 'Translating',
     loading: 'Loading', queued: 'Queued', waiting: 'Waiting', error: 'Error', starting: 'Starting...',
+    todayTab: 'Today',
   }
 };
 
@@ -443,42 +458,114 @@ let MAX_CONCURRENT = 1;       // updated from config in checkConfig()
 let maxUploadSizeMB = 500;    // updated from config in checkConfig()
 let batchStartTime = 0;       // elapsed timer start
 let batchTimerInterval = null;
+let currentDate = null;       // null = today + unfinished; "YYYY-MM-DD" = specific date
 
-// ── Task persistence (localStorage) ────────────────────────────────
-const STORAGE_KEY = 'et-batch-tasks';
+// ── Task persistence (SQLite via /api/history) ────────────────────
 
 function saveBatchTasks() {
-  // Only persist tasks that aren't done (done tasks get cleared on refresh)
-  const toSave = tasks
-    .filter(t => t.status !== 'done')
-    .map(t => ({
-      task_id: t.task_id, filename: t.filename,
+  // Sync all non-done tasks to server
+  tasks.forEach(t => {
+    if (t.status === 'done') return;
+    fetch('/api/history/tasks', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        filename: t.filename, file_type: t.file_type, file_size: t.file_size,
+        target_lang: t.target_lang || 'zh-CN', bilingual: t.bilingual !== false,
+        status: t.status, step: t.step || '',
+        file_progress: t.file_progress || 0, file_total: t.file_total || 0,
+        output: t.output || null, error: t.error || null,
+        start_time: t.start_time || Date.now(),
+      })
+    }).catch(() => {});
+  });
+}
+
+async function loadBatchTasks(date) {
+  const url = date ? `/api/history/tasks?date=${date}` : '/api/history/tasks';
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const rows = await r.json();
+    return rows.map(t => ({
+      task_id: null, filename: t.filename,
       file_type: t.file_type, file_size: t.file_size,
+      target_lang: t.target_lang || 'zh-CN', bilingual: t.bilingual !== false,
       status: t.status, step: t.step || '',
       file_progress: t.file_progress || 0, file_total: t.file_total || 0,
       output: t.output || null, error: t.error || null,
-      start_time: t.start_time || 0,  // preserve for accurate elapsed time on resume
-      timestamp: Date.now()
+      start_time: t.start_time || 0, sse: null,
     }));
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave)); } catch(e) {}
-}
-
-function loadBatchTasks() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const saved = JSON.parse(raw);
-    // Expire saved tasks older than 24 hours
-    if (saved.length > 0 && Date.now() - (saved[0].timestamp || 0) > 24 * 60 * 60 * 1000) {
-      localStorage.removeItem(STORAGE_KEY);
-      return [];
-    }
-    return saved.map(t => ({ ...t, sse: null }));
   } catch(e) { return []; }
 }
 
 function clearBatchTasks() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  // No-op: deletion is per-task via UI
+}
+
+// ── Date navigation ──────────────────────────────────────────────
+
+async function loadDateTabs() {
+  try {
+    const r = await fetch('/api/history/dates');
+    if (!r.ok) return;
+    const data = await r.json();
+    const dates = data.dates || [];
+    const container = document.getElementById('date-tabs');
+    // Keep "Today" tab, remove rest
+    container.querySelectorAll('.date-tab:not([data-date=""])').forEach(el => el.remove());
+    dates.forEach(date => {
+      const span = document.createElement('span');
+      span.className = 'date-tab';
+      span.dataset.date = date;
+      span.textContent = date;
+      span.onclick = () => switchDate(date);
+      span.style.cssText = 'cursor:pointer;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;white-space:nowrap;transition:all 0.15s;border:1px solid var(--border);color:var(--text2);';
+      container.appendChild(span);
+    });
+  } catch(e) {}
+}
+
+async function searchHistory() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) { switchDate(null); return; }
+  try {
+    const r = await fetch(`/api/history/search?q=${encodeURIComponent(q)}`);
+    if (!r.ok) return;
+    const rows = await r.json();
+    tasks = rows.map(t => ({
+      task_id: null, filename: t.filename,
+      file_type: t.file_type, file_size: t.file_size,
+      status: t.status, step: t.step || '',
+      file_progress: t.file_progress || 0, file_total: t.file_total || 0,
+      output: t.output || null, error: t.error || null,
+      start_time: t.start_time || 0, sse: null,
+    }));
+    if (tasks.length) showBatchCard(); else document.getElementById('batch-card').style.display = 'none';
+    renderTable();
+    updateUIState();
+    // Clear date tab highlights
+    document.querySelectorAll('.date-tab').forEach(el => {
+      el.style.background = ''; el.style.color = 'var(--text2)'; el.style.borderColor = 'var(--border)';
+    });
+    currentDate = null;
+  } catch(e) {}
+}
+
+async function switchDate(date) {
+  currentDate = date;
+  // Update tab styles
+  document.querySelectorAll('.date-tab').forEach(el => {
+    const active = el.dataset.date === (date || '');
+    el.style.background = active ? 'var(--accent-light)' : '';
+    el.style.color = active ? 'var(--accent)' : 'var(--text2)';
+    el.style.borderColor = active ? 'transparent' : 'var(--border)';
+  });
+  // Reload tasks for this date
+  tasks = await loadBatchTasks(date);
+  if (tasks.length) showBatchCard(); else document.getElementById('batch-card').style.display = 'none';
+  renderTable();
+  updateUIState();
 }
 
 // ── Config & Lang ──
@@ -494,7 +581,7 @@ function checkConfig() {
 
 // ── Resume saved batch tasks after page navigation ─────────────────
 async function tryResumeBatchTasks() {
-  const saved = loadBatchTasks();
+  const saved = await loadBatchTasks(currentDate);
   if (!saved.length) return;
 
   showBatchCard();
@@ -502,48 +589,25 @@ async function tryResumeBatchTasks() {
   renderTable();
   updateUIState();
 
-  // Fetch current status for each task from backend and reconnect SSE for running ones
+  // Reconnect SSE for running tasks
   for (const task of tasks) {
-    try {
-      const r = await fetch('/api/task/' + task.task_id);
-      if (!r.ok) {
-        // Task no longer exists on server — mark as error
-        task.status = 'error';
-        task.error = 'Task expired (server restarted)';
-        updateRow(task);
-        continue;
-      }
-      const serverState = await r.json();
-      const newStatus = serverState.status || '';
-
-      // Update task state from server
-      task.status = newStatus || task.status;
-      task.step = serverState.step || task.step;
-      task.file_progress = serverState.file_progress || task.file_progress;
-      task.file_total = serverState.file_total || task.file_total;
-      task.output = serverState.output || task.output;
-      task.error = serverState.error || task.error;
-
-      updateRow(task);
-
-      // Reconnect SSE for running tasks
-      if (newStatus === 'translating' || newStatus === 'loading' || newStatus === 'queued') {
-        runningCount++;
-        monitorTask(task);
-      }
-    } catch (err) {
-      task.status = 'error';
-      task.error = 'Failed to restore task';
+    if (task.status === 'translating' || task.status === 'loading' || task.status === 'queued') {
+      // We don't have real task_id from history, skip SSE reconnect for now
+      // (tasks will refresh on next state change)
+      task.status = 'stopped';
+      task.error = 'Page refreshed during translation. Please restart.';
       updateRow(task);
     }
   }
 
   updateUIState();
-  if (runningCount > 0) processQueue();
-  saveBatchTasks(); // Clean up done/errored from storage
+  saveBatchTasks();
 }
+let languageOptions = [];  // cached for per-row selects
+
 function loadLanguages() {
   fetch('/api/languages?ui=' + lang).then(r => r.json()).then(data => {
+    languageOptions = data;
     const sel = document.getElementById('lang-select');
     sel.innerHTML = '';
     data.forEach(l => { const o = document.createElement('option');
@@ -630,6 +694,8 @@ function uploadFile(file, itemEl) {
         resolve({
           task_id: data.task_id, filename: data.filename,
           file_type: data.file_type, file_size: file.size,
+          target_lang: document.getElementById('lang-select').value || 'zh-CN',
+          bilingual: document.getElementById('mode-select').value === 'bilingual',
           status: 'waiting', step: '', file_progress: 0, file_total: 0,
           output: null, error: null, sse: null,
         });
@@ -653,7 +719,7 @@ function showBatchCard() {
 function renderTable() {
   const tbody = document.getElementById('batch-tbody');
   if (!tasks.length) {
-    tbody.innerHTML = `<tr class="empty-state"><td colspan="7"><div class="icon">📂</div><p>${t('noTasks')}</p></td></tr>`;
+    tbody.innerHTML = `<tr class="empty-state"><td colspan="9"><div class="icon">📂</div><p>${t('noTasks')}</p></td></tr>`;
     return;
   }
   tbody.innerHTML = tasks.map((task, i) => buildRowHTML(task, i)).join('');
@@ -674,23 +740,23 @@ function buildRowHTML(task, i) {
   const fname = task.filename || '';
 
   // ── Action buttons per status ──
+  const tid = (task.task_id && task.task_id !== 'null') ? task.task_id : '';
   let actions = '';
   if (status === 'done') {
-    actions = `<button class="btn btn-download btn-sm" onclick="downloadTask('${task.task_id}')">${t('download')}</button>
-               <button class="btn btn-primary btn-sm" onclick="retranslateTask('${task.task_id}')">${t('retranslate')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-download btn-sm" onclick="downloadTask('${tid}')">${t('download')}</button>
+               <button class="btn btn-primary btn-sm" onclick="retranslateTask('${tid}')">${t('retranslate')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   } else if (isRunning) {
-    actions = `<button class="btn btn-danger btn-sm" onclick="stopSingleTask('${task.task_id}')">⏹ ${t('stop')}</button>`;
+    actions = `<button class="btn btn-danger btn-sm" onclick="stopSingleTask('${tid}')">⏹ ${t('stop')}</button>`;
   } else if (status === 'error') {
-    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('retry')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${tid}')">▶ ${t('retry')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   } else if (status === 'stopped') {
-    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${tid}')">▶ ${t('start')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   } else {
-    // waiting
-    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-primary btn-sm" onclick="retranslateTask('${tid}')">${t('retranslate')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   }
 
   // ── Progress ──
@@ -710,11 +776,23 @@ function buildRowHTML(task, i) {
     progressHTML = `<span style="font-size:11px;color:var(--text2);">—</span>`;
   }
 
-  return `<tr id="row-${task.task_id}">
+  // ── Per-row lang/mode selects ──
+  const tl = task.target_lang || 'zh-CN';
+  const isBi = task.bilingual !== false;
+  const langOpts = languageOptions.map(l =>
+    `<option value="${l.code}"${l.code===tl?' selected':''}>${l.name}</option>`
+  ).join('');
+  const modeOpts = `<option value="bilingual"${isBi?' selected':''}>${lang==='zh'?'双语':'Bilingual'}</option>
+    <option value="target_only"${!isBi?' selected':''}>${lang==='zh'?'仅目标语言':'Target Only'}</option>`;
+
+  const rowId = (task.task_id && task.task_id !== 'null') ? task.task_id : task.filename.replace(/[^a-zA-Z0-9]/g, '_');
+  return `<tr id="row-${rowId}">
     <td>${i + 1}</td>
     <td title="${fname}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">${fname}</td>
     <td class="hide-mobile" style="font-size:11px;">${typeLabel}</td>
     <td class="hide-mobile" style="font-size:11px;">${fmtSize(task.file_size||0)}</td>
+    <td class="hide-mobile"><select class="row-lang" onchange="updateTaskSetting('${task.task_id}','target_lang',this.value)" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--text);">${langOpts}</select></td>
+    <td class="hide-mobile"><select class="row-mode" onchange="updateTaskSetting('${task.task_id}','bilingual',this.value)" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--text);">${modeOpts}</select></td>
     <td><span class="badge ${badgeClass}">${statusText}</span></td>
     <td>${progressHTML}</td>
     <td><div class="actions-cell">${actions}</div></td>
@@ -722,9 +800,10 @@ function buildRowHTML(task, i) {
 }
 
 function updateRow(task) {
-  const row = document.getElementById('row-' + task.task_id);
+  const rowId = (task.task_id && task.task_id !== 'null') ? task.task_id : task.filename.replace(/[^a-zA-Z0-9]/g, '_');
+  const row = document.getElementById('row-' + rowId);
   if (!row) { renderTable(); return; }
-  const idx = tasks.findIndex(t => t.task_id === task.task_id);
+  const idx = tasks.findIndex(t => (t.task_id && t.task_id !== 'null') ? t.task_id === task.task_id : t.filename === task.filename);
   const status = task.status || 'waiting';
   const fp = task.file_progress || 0;
   const ft = task.file_total || 0;
@@ -741,44 +820,51 @@ function updateRow(task) {
   row.cells[1].title = task.filename||'';
   row.cells[2].textContent = (task.file_type||'').replace('.','').toUpperCase();
   row.cells[3].textContent = fmtSize(task.file_size||0);
-  const badge = row.cells[4].querySelector('.badge');
+  // cells[4]=lang, cells[5]=mode — preserve existing selects
+  const statusCell = row.cells[row.cells.length - 3];  // 3rd from end: before progress, actions
+  const badge = statusCell ? statusCell.querySelector('.badge') : null;
   if (badge) { badge.className = 'badge ' + badgeClass; badge.textContent = statusText; }
 
-  // Progress
+  // Progress (2nd from last cell)
+  const progCell = row.cells[row.cells.length - 2];
+  if (!progCell) return;
   if (status === 'done') {
     const doneTime = task.start_time ? fmtTime((Date.now() - task.start_time) / 1000) : '';
-    row.cells[5].innerHTML = `<span style="font-size:11px;color:var(--green);">✓ ${t('done')}</span>${doneTime ? ' <span style="font-size:10px;color:var(--text2);">' + doneTime + '</span>' : ''}`;
+    progCell.innerHTML = `<span style="font-size:11px;color:var(--green);">✓ ${t('done')}</span>${doneTime ? ' <span style="font-size:10px;color:var(--text2);">' + doneTime + '</span>' : ''}`;
   } else if (isRunning) {
     const t0 = task.start_time || Date.now();
     const elapsed = fmtTime((Date.now() - t0) / 1000);
-    row.cells[5].innerHTML = `<div class="row-progress-bar"><div class="row-bar"><div class="row-bar-fill" style="width:${pct}%;"></div></div><span class="row-pct">${pct}%</span></div>
+    progCell.innerHTML = `<div class="row-progress-bar"><div class="row-bar"><div class="row-bar-fill" style="width:${pct}%;"></div></div><span class="row-pct">${pct}%</span></div>
       <div class="row-step">${statusText}</div>
       <div class="row-time" data-start="${t0}">${elapsed}</div>`;
   } else if (status === 'error') {
-    row.cells[5].innerHTML = `<span style="font-size:11px;color:var(--red);" title="${(task.error||'').replace(/"/g,'&quot;')}">${(task.error||t('error')).substring(0,40)}</span>`;
+    progCell.innerHTML = `<span style="font-size:11px;color:var(--red);" title="${(task.error||'').replace(/"/g,'&quot;')}">${(task.error||t('error')).substring(0,40)}</span>`;
   } else {
-    row.cells[5].innerHTML = `<span style="font-size:11px;color:var(--text2);">—</span>`;
+    progCell.innerHTML = `<span style="font-size:11px;color:var(--text2);">—</span>`;
   }
 
   // Actions
+  const tid = (task.task_id && task.task_id !== 'null') ? task.task_id : '';
+  const fname = task.filename || '';
   let actions = '';
   if (status === 'done') {
-    actions = `<button class="btn btn-download btn-sm" onclick="downloadTask('${task.task_id}')">${t('download')}</button>
-               <button class="btn btn-primary btn-sm" onclick="retranslateTask('${task.task_id}')">${t('retranslate')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-download btn-sm" onclick="downloadTask('${tid}')">${t('download')}</button>
+               <button class="btn btn-primary btn-sm" onclick="retranslateTask('${tid}')">${t('retranslate')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   } else if (isRunning) {
-    actions = `<button class="btn btn-danger btn-sm" onclick="stopSingleTask('${task.task_id}')">⏹ ${t('stop')}</button>`;
+    actions = `<button class="btn btn-danger btn-sm" onclick="stopSingleTask('${tid}')">⏹ ${t('stop')}</button>`;
   } else if (status === 'error') {
-    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('retry')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${tid}')">▶ ${t('retry')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   } else if (status === 'stopped') {
-    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${tid}')">▶ ${t('start')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   } else {
-    actions = `<button class="btn btn-primary btn-sm" onclick="startSingleTask('${task.task_id}')">▶ ${t('start')}</button>
-               <button class="btn btn-ghost btn-sm" onclick="removeTask('${task.task_id}')">✕</button>`;
+    actions = `<button class="btn btn-primary btn-sm" onclick="retranslateTask('${tid}')">${t('retranslate')}</button>
+               <button class="btn btn-ghost btn-sm" onclick="removeTask('${tid}','${fname.replace(/'/g,"\\'")}')">✕</button>`;
   }
-  row.cells[6].querySelector('.actions-cell').innerHTML = actions;
+  const lastCell = row.cells[row.cells.length - 1];
+  if (lastCell) lastCell.innerHTML = '<div class="actions-cell">' + actions + '</div>';
 }
 
 // ── Single Task Control ──
@@ -804,8 +890,9 @@ async function startSingleTask(taskId) {
   updateRow(task);
   updateUIState();
 
-  const targetLang = document.getElementById('lang-select').value || 'zh-CN';
-  const bilingual = document.getElementById('mode-select').value === 'bilingual';
+  const targetLang = task.target_lang || document.getElementById('lang-select').value || 'zh-CN';
+  const bilingual = task.bilingual !== undefined ? task.bilingual
+    : (document.getElementById('mode-select').value === 'bilingual');
   const pages = document.getElementById('pdf-pages').value.trim() || null;
   const endpoint = getStartEndpoint(task.file_type);
 
@@ -873,6 +960,8 @@ function monitorTask(task) {
       updateUIState();
       saveBatchTasks();
       processQueue();
+      // Force re-render after a tick — ensures DOM is synced
+      setTimeout(() => { updateRow(task); updateUIState(); }, 200);
     }
   };
 
@@ -926,18 +1015,56 @@ async function retranslateTask(taskId) {
   startSingleTask(taskId);
 }
 
-function downloadTask(taskId) {
-  window.location.href = '/api/download/' + taskId;
+function updateTaskSetting(taskId, field, value) {
+  const task = tasks.find(t => t.task_id === taskId);
+  if (!task) return;
+  if (field === 'bilingual') task.bilingual = value === 'bilingual';
+  else task[field] = value;
+  saveBatchTasks();
 }
 
-function removeTask(taskId) {
+function downloadTask(taskId) {
+  // History tasks: try direct output path
   const task = tasks.find(t => t.task_id === taskId);
-  if (task && task.sse) { task.sse.close(); task.sse = null; }
-  if (task && (task.status === 'translating' || task.status === 'loading' || task.status === 'queued')) {
-    fetch('/api/stop/' + taskId, { method: 'POST' }).catch(() => {});
-    runningCount = Math.max(0, runningCount - 1);
+  if (task && task.output) {
+    // For history tasks, output is a file path — try direct download
+    const outName = task.output.split('/').pop() || task.output.split('\\').pop();
+    // We can't serve arbitrary paths — fall back to API
   }
-  tasks = tasks.filter(t => t.task_id !== taskId);
+  if (taskId && taskId !== 'null') {
+    window.location.href = '/api/download/' + taskId;
+  }
+}
+
+function removeTask(taskId, filename) {
+  let idx = -1;
+  // Find by task_id first, then by filename for history tasks
+  if (taskId && taskId !== 'null') {
+    idx = tasks.findIndex(t => t.task_id === taskId);
+  }
+  if (idx < 0 && filename) {
+    idx = tasks.findIndex(t => t.filename === filename);
+  }
+  if (idx < 0) return;
+
+  const task = tasks[idx];
+  const tid = task.task_id;
+  const fname = task.filename;
+
+  // Delete from history DB (safe: only matches exact filename)
+  fetch('/api/history/tasks/' + encodeURIComponent(fname), { method: 'DELETE' }).catch(() => {});
+
+  // Live task cleanup
+  if (tid && tid !== 'null') {
+    if (task.sse) { task.sse.close(); task.sse = null; }
+    if (task.status === 'translating' || task.status === 'loading' || task.status === 'queued') {
+      fetch('/api/stop/' + tid, { method: 'POST' }).catch(() => {});
+      runningCount = Math.max(0, runningCount - 1);
+    }
+  }
+
+  // Remove by index — exact single deletion
+  tasks.splice(idx, 1);
   saveBatchTasks();
   renderTable();
   updateUIState();
@@ -1091,6 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
   applyI18n();
   checkConfig();
   loadLanguages();
+  loadDateTabs();
 });
 </script>
 </body>

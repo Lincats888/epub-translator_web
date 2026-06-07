@@ -70,6 +70,34 @@ def _update(task_id: str, **kwargs):
     with _lock:
         if task_id in _tasks:
             _tasks[task_id].update(kwargs)
+    # If transition to 'done', record in history
+    if kwargs.get("status") == "done":
+        _record_history(task_id)
+
+
+def _record_history(task_id: str):
+    """Persist completed translation to SQLite history."""
+    try:
+        _ensure_history()
+        task = _tasks.get(task_id, {})
+        filename = task.get("filename", "")
+        if not filename:
+            return
+        upsert_task(
+            DEFAULT_USERID, filename,
+            file_type=task.get("file_type", ""),
+            file_size=task.get("file_size", 0),
+            target_lang=task.get("target_lang", "zh-CN"),
+            bilingual=task.get("bilingual", True),
+            status="done",
+            step=task.get("step", ""),
+            file_progress=task.get("file_progress", 0),
+            file_total=task.get("file_total", 0),
+            output=task.get("output", ""),
+            start_time=task.get("start_time", 0),
+        )
+    except Exception:
+        pass  # history recording should never break translation
 
 
 # ── EPUB Metadata Reader ──────────────────────────────────────────────
@@ -291,7 +319,7 @@ def _read_epub_content(epub_path: str, opf_dir: str, href: str) -> str:
 # ── Translation Runner ────────────────────────────────────────────────
 
 def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN", bilingual: bool = True):
-    """Background EPUB translation — mirrors main.py cmd_translate logic."""
+    """Background EPUB translation — global batch for maximum concurrency."""
     try:
         _update(task_id, status="loading", step="Loading configuration...")
         config = Config(CONFIG_PATH)
@@ -320,76 +348,103 @@ def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN", bil
             _update(task_id, status="error", error="No content files found in EPUB")
             return
 
+        # ── Phase 1: Parse all files, collect ALL uncached fragments ─
+        _update(task_id, step="Analyzing document...")
         total_files = len(content_files)
-        translator_obj = Translator(config, target_lang, bilingual)
-        total_translated = 0
+
+        # Per-file metadata for write-back: (parsed, uncached_indices, cached_translations)
+        file_meta: list[dict] = []
+        all_uncached_texts: list[str] = []   # global flat list for translate_all
         total_cached = 0
-        is_bilingual = bilingual
 
-        _update(task_id, status="translating", step="Translating...",
-                current_file=0, total_files=total_files,
-                file_progress=0, file_total=0)
-
-        for file_idx, file_path in enumerate(content_files, 1):
-            # Check stop flag
-            if _tasks.get(task_id, {}).get("stopped"):
-                _update(task_id, status="stopped", step="Stopped by user")
-                return
-
+        for file_path in content_files:
             rel_path = os.path.relpath(file_path, extract_dir)
-            parsed = parse_file(file_path, config.skip_tags, bilingual=is_bilingual)
+            parsed = parse_file(file_path, config.skip_tags, bilingual=bilingual)
             if not parsed.fragments:
+                file_meta.append({"parsed": parsed, "file_path": file_path,
+                                  "rel_path": rel_path, "uncached_indices": [],
+                                  "cached_trans": []})
                 continue
 
             uncached_indices = []
-            uncached_texts = []
+            cached_trans = [None] * len(parsed.fragments)
             for i, frag in enumerate(parsed.fragments):
                 cached = cache.get(frag.text)
                 if cached is not None:
+                    cached_trans[i] = cached
                     total_cached += 1
                 else:
-                    uncached_texts.append(frag.text)
                     uncached_indices.append(i)
+                    all_uncached_texts.append(frag.text)
 
-            if uncached_texts:
-                _update(task_id, current_file=file_idx, total_files=total_files,
-                        file_name=rel_path, file_progress=0,
-                        file_total=len(uncached_texts))
+            file_meta.append({"parsed": parsed, "file_path": file_path,
+                              "rel_path": rel_path, "uncached_indices": uncached_indices,
+                              "cached_trans": cached_trans})
 
-                def on_progress(done, _ft=len(uncached_texts), _fi=file_idx,
-                                _tf=total_files, _rn=rel_path):
-                    _update(task_id, current_file=_fi, total_files=_tf,
-                            file_name=_rn, file_progress=min(done, _ft),
-                            file_total=_ft)
+        total_uncached = len(all_uncached_texts)
+        translator_obj = Translator(config, target_lang, bilingual)
 
-                try:
-                    translations_result = translator_obj.translate_all(
-                        uncached_texts, progress_callback=on_progress,
-                        stop_check=lambda: _tasks.get(task_id, {}).get("stopped", False)
-                    )
-                except StopTranslation:
-                    cache.flush()
-                    _update(task_id, status="stopped", step="Stopped by user")
-                    return
+        # ── Phase 2: One global translate_all call ──────────────────
+        total_translated = 0
+        _update(task_id, status="translating",
+                step=f"0 / {total_uncached} fragments" if total_uncached > 0 else "All cached",
+                current_file=0, total_files=total_files,
+                file_progress=0, file_total=max(total_uncached, 1),
+                translated=0, cached=total_cached)
 
-                file_translations = [None] * len(parsed.fragments)
-                for i, frag in enumerate(parsed.fragments):
-                    cached = cache.get(frag.text)
-                    if cached is not None:
-                        file_translations[i] = cached
-                for idx, translation in zip(uncached_indices, translations_result):
-                    file_translations[idx] = translation
-                    cache.put(parsed.fragments[idx].text, translation)
+        if total_uncached > 0:
+            def on_global_progress(done):
+                # done ≈ completed batches × batch_size (approximate)
+                cum = min(done, total_uncached)
+                _update(task_id,
+                        file_progress=cum, file_total=total_uncached,
+                        step=f"{cum} / {total_uncached} fragments")
+
+            try:
+                all_translations = translator_obj.translate_all(
+                    all_uncached_texts, progress_callback=on_global_progress,
+                    stop_check=lambda: _tasks.get(task_id, {}).get("stopped", False)
+                )
+            except StopTranslation:
+                cache.flush()
+                _update(task_id, status="stopped", step="Stopped by user")
+                return
+
+            # ── Phase 3: Distribute translations back to files ──────
+            trans_idx = 0
+            for meta in file_meta:
+                parsed = meta["parsed"]
+                if not parsed.fragments:
+                    continue
+
+                uncached_indices = meta["uncached_indices"]
+                cached_trans = meta["cached_trans"]
+                file_translations = list(cached_trans)
+
+                for fi in uncached_indices:
+                    translation = all_translations[trans_idx]
+                    file_translations[fi] = translation
+                    cache.put(parsed.fragments[fi].text, translation)
                     total_translated += 1
+                    trans_idx += 1
 
                 cache.flush()
-            else:
-                file_translations = [cache.get(frag.text) for frag in parsed.fragments]
+                parsed.save(file_translations)
 
-            parsed.save(file_translations)
+                if _tasks.get(task_id, {}).get("stopped"):
+                    _update(task_id, status="stopped", step="Stopped by user")
+                    return
+        else:
+            # All cached — just save
+            for meta in file_meta:
+                parsed = meta["parsed"]
+                if parsed.fragments:
+                    parsed.save(meta["cached_trans"])
 
-        _update(task_id, step="Rebuilding EPUB...")
-        if is_bilingual:
+        # ── Phase 4: Rebuild ────────────────────────────────────────
+        _update(task_id, step="Rebuilding EPUB...",
+                file_progress=total_uncached, file_total=max(total_uncached, 1))
+        if bilingual:
             inject_line_height(extract_dir)
         output_path = rebuild_epub(extract_dir, OUTPUT_DIR, book_name)
 
@@ -1024,6 +1079,19 @@ async def start_translation(task_id: str, body: dict = None):
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(404, "File not found")
 
+    filename = task.get("filename", "")
+    force = (body or {}).get("force", False)
+    # ── Duplicate check ──────────────────────────────────────────
+    if not force:
+        _ensure_history()
+        done = check_done(DEFAULT_USERID, filename)
+        if done:
+            raise HTTPException(
+                409,
+                f"Already translated on {done['date']}. "
+                f"Send force=true to re-translate."
+            )
+
     # Get target language and mode from request body
     target_lang = "zh-CN"
     bilingual = True
@@ -1058,6 +1126,18 @@ async def start_babeldoc_translation(task_id: str, body: dict = None):
     file_path = task.get("file_path")
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(404, "File not found")
+
+    filename = task.get("filename", "")
+    force = (body or {}).get("force", False)
+    if not force:
+        _ensure_history()
+        done = check_done(DEFAULT_USERID, filename)
+        if done:
+            raise HTTPException(
+                409,
+                f"Already translated on {done['date']}. "
+                f"Send force=true to re-translate."
+            )
 
     target_lang = "zh-CN"
     bilingual = True
@@ -1275,6 +1355,75 @@ async def update_config(body: dict):
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
 
     return {"ok": True, "api_key_masked": _mask_key(cfg.get("api_key", ""))}
+
+
+# ── Translation History API ────────────────────────────────────────────
+
+from server.history_store import init_db as _init_history_db, \
+    check_done, upsert_task, query_tasks, list_dates, search_tasks, \
+    delete_task, DEFAULT_USERID
+
+_history_ready = False
+
+
+def _ensure_history():
+    global _history_ready
+    if not _history_ready:
+        _init_history_db()
+        _history_ready = True
+
+
+@app.get("/api/history/check")
+async def history_check(filename: str = Query(...),
+                         userid: str = Query(default=DEFAULT_USERID)):
+    """Check if a file was already translated successfully."""
+    _ensure_history()
+    result = check_done(userid, filename)
+    if result:
+        return {"already_done": True, **result}
+    return {"already_done": False}
+
+
+@app.get("/api/history/tasks")
+async def history_query(date: str = Query(default=None),
+                         userid: str = Query(default=DEFAULT_USERID)):
+    """Query translation history. No date = today + unfinished."""
+    _ensure_history()
+    return query_tasks(userid, date)
+
+
+@app.post("/api/history/tasks")
+async def history_upsert(body: dict):
+    """Create or update a translation record."""
+    _ensure_history()
+    filename = body.pop("filename")
+    userid = body.pop("userid", DEFAULT_USERID)
+    upsert_task(userid, filename, **body)
+    return {"ok": True}
+
+
+@app.delete("/api/history/tasks/{filename:path}")
+async def history_delete(filename: str,
+                          userid: str = Query(default=DEFAULT_USERID)):
+    """Delete a translation record."""
+    _ensure_history()
+    delete_task(userid, filename)
+    return {"ok": True}
+
+
+@app.get("/api/history/search")
+async def history_search(q: str = Query(...),
+                          userid: str = Query(default=DEFAULT_USERID)):
+    """Search translation history by filename."""
+    _ensure_history()
+    return search_tasks(userid, q)
+
+
+@app.get("/api/history/dates")
+async def history_dates(userid: str = Query(default=DEFAULT_USERID)):
+    """List all dates that have translation records."""
+    _ensure_history()
+    return {"dates": list_dates(userid)}
 
 
 # ── Frontend ───────────────────────────────────────────────────────────

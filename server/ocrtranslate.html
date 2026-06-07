@@ -738,20 +738,21 @@ function toggleTranslation() {
   const btn = document.getElementById('btn-action');
   const status = btn.dataset.status;
   if (!status || status === 'done' || status === 'error' || status === 'stopped') {
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Starting...';
-    btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
-    // Close preview panel when starting translation
-    if (previewOpen) togglePreview();
-    const targetLang = document.getElementById('target-lang').value;
-    const transMode = document.getElementById('trans-mode').value;
-    // Always use OCR endpoint
-    fetch(`/api/start_ocr/${taskId}`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual'})
-    }).then(r=>r.json()).then(() => {
-      btn.disabled = false; showStopButton(); startProgress();
-    }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });
+    // Check history first
+    const filename = document.getElementById('book-title').textContent;
+    fetch(`/api/history/check?filename=${encodeURIComponent(filename)}`)
+      .then(r => r.json())
+      .then(result => {
+        if (result.already_done) {
+          const msg = (lang === 'zh'
+            ? `该文件已于 ${result.date} 翻译完成。确定要重新翻译吗？`
+            : `This file was already translated on ${result.date}. Re-translate?`);
+          if (!confirm(msg)) return;
+        }
+        doOcrStartTranslation(btn);
+      })
+      .catch(() => { doOcrStartTranslation(btn); });
+  } else if (status === 'translating' || status === 'loading' || status === 'queued') {
   } else if (status === 'translating' || status === 'loading' || status === 'queued') {
     fetch(`/api/stop/${taskId}`,{method:'POST'}).then(()=>{});
     btn.innerHTML = 'Stopping...'; btn.disabled = true;
@@ -765,6 +766,24 @@ function toggleTranslation() {
     }, 5000);
   }
 }
+function doOcrStartTranslation(btn) {
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Starting...';
+    btn.classList.remove('btn-primary','btn-download','btn-danger'); btn.classList.add('btn-ghost'); btn.disabled = true;
+    if (previewOpen) togglePreview();
+    const targetLang = document.getElementById('target-lang').value;
+    const transMode = document.getElementById('trans-mode').value;
+    fetch(`/api/start_ocr/${taskId}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({target_lang: targetLang, bilingual: transMode === 'bilingual'})
+    }).then(r => {
+      if (!r.ok) return r.json().then(err => { throw new Error(err.detail || 'Server error'); });
+      return r.json();
+    }).then(() => {
+      btn.disabled = false; showStopButton(); startProgress();
+    }).catch(e => { btn.disabled = false; showStartButton(); toast(t('startFail')+e.message,'error'); });
+  }
+
 function showStopButton() {
   const btn = document.getElementById('btn-action'); btn.dataset.status = 'translating';
   btn.innerHTML = t('stopBtn'); btn.disabled = false;

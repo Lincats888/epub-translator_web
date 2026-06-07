@@ -32,13 +32,14 @@ class BaseHandler(ABC):
 
     @abstractmethod
     def extract(self, file_path: str, skip_tags: list[str] = None,
-                bilingual: bool = True) -> list[TextFragment]:
+                bilingual: bool = True, **kwargs) -> list[TextFragment]:
         """Extract translatable fragments from the file.
 
         Args:
             file_path: Path to the source file
             skip_tags: Tags/elements to skip (handler interprets as needed)
             bilingual: Whether bilingual mode is enabled
+            **kwargs: Extra handler-specific options (e.g. pages for PDF)
 
         Returns:
             List of TextFragment with text and metadata for rebuild

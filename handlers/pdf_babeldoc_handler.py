@@ -211,6 +211,8 @@ class PdfBabeldocHandler(BaseHandler):
             # ── Quality ──
             use_alternating_pages_dual=True,   # 交替页面双语（与原生 PDF 相同模式）
             use_side_by_side_dual=False,        # 禁用同页并排（默认 True 会导致中文覆盖英文）
+            # ── Watermark ──
+            watermark_output_mode=WatermarkOutputMode.NoWatermark,
             # ── Let BabelDOC detect scanned PDFs ──
             skip_scanned_detection=False,
             # Skip automatic glossary extraction — saves 30-90s of
@@ -354,6 +356,7 @@ class PdfBabeldocHandler(BaseHandler):
             no_dual=not bilingual,
             use_alternating_pages_dual=True,
             use_side_by_side_dual=False,
+            watermark_output_mode=WatermarkOutputMode.NoWatermark,
             skip_scanned_detection=False,
             auto_extract_glossary=False,
         )
