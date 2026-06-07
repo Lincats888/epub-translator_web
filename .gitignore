@@ -32,3 +32,6 @@ Thumbs.db
 *.docx
 !tests/fixtures/*.epub
 nonexistent*.yaml
+*.db
+*.db-shm
+*.db-wal
