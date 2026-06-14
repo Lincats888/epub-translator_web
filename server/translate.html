@@ -391,6 +391,10 @@
           </span>
         </div>
         <div class="scanned-badge" id="scanned-badge" data-i18n="scannedBadge"></div>
+        <label style="display:flex; align-items:center; gap:6px; margin-top:10px; font-size:13px; color:var(--text2); cursor:pointer;">
+          <input type="checkbox" id="export-markdown" style="width:16px; height:16px; cursor:pointer;">
+          <span data-i18n="exportMd"></span>
+        </label>
         <div class="book-actions">
           <button class="btn btn-primary" id="btn-action" onclick="toggleTranslation()" data-i18n="startBtn"></button>
           <button class="btn btn-ghost preview-toggle" id="btn-preview" onclick="togglePreview()" style="display:none;" data-i18n="preview">
@@ -446,6 +450,7 @@ const i18n = {
     orBrowse: '或点击选择文件',
     preview: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> 预览',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始翻译',
+    exportMd: '导出 Markdown',
     targetLang: '目标语言：',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> 停止',
     downloadBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载',
@@ -480,6 +485,7 @@ const i18n = {
     dropHere: 'Drop your file here',
     orBrowse: 'or click to browse',
     preview: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview',
+    exportMd: 'Export Markdown',
     startBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Translation',
     targetLang: 'Target: ',
     stopBtn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop',
@@ -659,10 +665,11 @@ function tryResumeTask() {
           const done = task.file_progress || 0;
           const total = task.file_total || 100;
           const pct = total > 0 ? Math.round(done / total * 100) : 0;
+          const isBabeldocRestore = task.total_files === 1 && task.file_total === 100;
           document.getElementById('progress-fill').style.width = pct + '%';
           document.getElementById('progress-pct').textContent = pct + '%';
-          document.getElementById('progress-label').textContent = task.step || t('translating');
-          document.getElementById('progress-files').innerHTML = `${done} / ${total}`;
+          document.getElementById('progress-label').textContent = task.step || task.file_name || t('translating');
+          document.getElementById('progress-files').textContent = isBabeldocRestore ? (task.step || '') : `${done} / ${total}`;
         }
         showStopButton();
         document.getElementById('progress-bar').classList.add('active');
@@ -892,9 +899,11 @@ function doStartTranslation(btn, force) {
     const isPdf = currentFileType === '.pdf';
     const isBabeldoc = isPdf && (engine === 'babeldoc');
     const apiRoute = isBabeldoc ? `/api/start_babeldoc/${taskId}` : `/api/start/${taskId}`;
+    const exportMarkdown = document.getElementById('export-markdown').checked;
     const bodyData = JSON.stringify({
       target_lang: targetLang,
       bilingual: transMode === 'bilingual',
+      export_markdown: exportMarkdown,
       ...(isPdf && {pdf_method: engine}),
       ...(isBabeldoc && {ui_lang: lang}),
       ...(pages && {pages: pages}),
@@ -935,39 +944,66 @@ function startProgress() {
   document.getElementById('progress-bar').classList.add('active');
   timerInterval = setInterval(() => { document.getElementById('progress-time').textContent = fmtTime((Date.now()-startTime)/1000); }, 1000);
   if (eventSource) eventSource.close();
+  let sseRetries = 0;  // SSE error retry counter (like batch.html)
   eventSource = new EventSource(`/api/progress/${taskId}`);
   eventSource.onmessage = e => {
     const d = JSON.parse(e.data);
-    if (d.status === 'translating') {
+    sseRetries = 0;  // reset on successful message
+
+    // ── Detect BabelDOC: time-based 0-100 scale, no real fragments ─
+    const isBabeldoc = d.total_files === 1 && d.file_total === 100;
+
+    if (d.status === 'loading') {
+      // Show loading step text (BabelDOC init phase)
+      const pct = d.file_progress || 0;
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('progress-pct').textContent = pct + '%';
+      document.getElementById('progress-label').textContent = d.step || d.file_name || t('translating');
+      document.getElementById('progress-files').textContent = '';
+    } else if (d.status === 'translating') {
       const done = d.file_progress || 0;
       const total = d.file_total || 100;
       const pct = total > 0 ? Math.round(done / total * 100) : 0;
       document.getElementById('progress-fill').style.width = pct + '%';
       document.getElementById('progress-pct').textContent = pct + '%';
-      // Show current file name as label, fall back to step text
+      // Label: use file name, fall back to step text
       if (d.file_name) {
         const shortName = d.file_name.split('/').pop() || d.file_name;
         document.getElementById('progress-label').textContent = shortName;
       } else {
         document.getElementById('progress-label').textContent = d.step || t('translating');
       }
-      // Show file X/Y · fragments A/B
-      const filesInfo = d.total_files > 0 ? `${lang==='zh'?'文件':'File'} ${d.current_file}/${d.total_files}` : '';
-      const fragsInfo = total > 0 ? `${lang==='zh'?'片段':'frags'} ${done}/${total}` : d.step || '';
-      document.getElementById('progress-files').innerHTML = filesInfo ? `${filesInfo} · ${fragsInfo}` : fragsInfo;
+      // Sub-info: for BabelDOC show step, otherwise show files/frags
+      if (isBabeldoc) {
+        document.getElementById('progress-files').textContent = d.step || '';
+      } else {
+        const filesInfo = d.total_files > 0 ? `${lang==='zh'?'文件':'File'} ${d.current_file}/${d.total_files}` : '';
+        const fragsInfo = total > 0 ? `${lang==='zh'?'片段':'frags'} ${done}/${total}` : d.step || '';
+        document.getElementById('progress-files').innerHTML = filesInfo ? `${filesInfo} · ${fragsInfo}` : fragsInfo;
+      }
       showStopButton();
     } else if (d.status === 'done') { finishProgress(d); }
     else if (d.status === 'error') { errorProgress(d); }
     else if (d.status === 'stopped') { stoppedProgress(); }
   };
-  eventSource.onerror = () => { eventSource.close(); };
+  eventSource.onerror = () => {
+    sseRetries++;
+    if (sseRetries < 5) return;  // retry up to 5 times (like batch.html)
+    eventSource.close();
+  };
 }
 function finishProgress(d) {
   clearInterval(timerInterval); eventSource.close();
   document.getElementById('progress-fill').style.width = '100%';
   document.getElementById('progress-pct').textContent = '100%';
   document.getElementById('progress-label').textContent = t('done');
-  document.getElementById('progress-files').innerHTML = `${d.translated||0} translated · ${d.cached||0} cached · ${fmtTime((Date.now()-startTime)/1000)}`;
+  const elapsed = fmtTime((Date.now()-startTime)/1000);
+  // BabelDOC doesn't have real translated/cached counts
+  if (d.translated || d.cached) {
+    document.getElementById('progress-files').innerHTML = `${d.translated||0} translated · ${d.cached||0} cached · ${elapsed}`;
+  } else {
+    document.getElementById('progress-files').textContent = `${lang==='zh'?'完成':'Done'} · ${elapsed}`;
+  }
   showDownloadButton(); toast(t('transComplete'),'success');
 }
 function errorProgress(d) { clearInterval(timerInterval); eventSource.close(); document.getElementById('progress-label').textContent = 'Error: '+(d.error||'Unknown'); showStartButton(); toast(d.error||t('transFailed'),'error'); }

@@ -448,6 +448,19 @@ def _run_translate(task_id: str, epub_path: str, target_lang: str = "zh-CN", bil
             inject_line_height(extract_dir)
         output_path = rebuild_epub(extract_dir, OUTPUT_DIR, book_name)
 
+        # ── Markdown export ─────────────────────────────────────
+        if _tasks.get(task_id, {}).get("export_markdown"):
+            print(f"\n[MARKDOWN] Export flag detected, exporting EPUB to {OUTPUT_DIR}/markdown/{book_name}\n")
+            try:
+                from handlers.markdown_exporter import MarkdownExporter
+                md_dir = MarkdownExporter.export_epub(
+                    extract_dir, OUTPUT_DIR, book_name
+                )
+                _update(task_id, markdown_dir=md_dir)
+            except Exception as e:
+                logger.exception("Markdown export failed")
+                print(f"\n[MARKDOWN] Export FAILED: {e}\n")
+
         _update(task_id, status="done", step="Complete!",
                 output=output_path, translated=total_translated, cached=total_cached)
 
@@ -766,11 +779,48 @@ def _run_translate_generic(task_id: str, file_path: str, target_lang: str = "zh-
             method=pdf_method
         )
 
+        # ── Markdown export ─────────────────────────────────────
+        if _tasks.get(task_id, {}).get("export_markdown"):
+            _export_markdown_generic(
+                task_id, file_path, output_path, fragments,
+                all_translations, pdf_method, file_type
+            )
+
         _update(task_id, status="done", step="Complete!",
                 output=output_path, translated=total, cached=0)
 
     except Exception as e:
         _update(task_id, status="error", error=str(e))
+
+
+def _export_markdown_generic(
+    task_id: str, file_path: str, output_path: str,
+    fragments: list, translations: list[str],
+    pdf_method: str, file_type: str,
+):
+    """Export translated content to Markdown for DOCX/PDF formats."""
+    from handlers.markdown_exporter import MarkdownExporter
+
+    book_name = os.path.splitext(os.path.basename(file_path))[0]
+
+    try:
+        if file_type == ".docx":
+            md_dir = MarkdownExporter.export_docx(
+                fragments, translations, OUTPUT_DIR, book_name
+            )
+        elif pdf_method == "babeldoc" or pdf_method == "pdf2zh":
+            # BabelDOC and pdf2zh: re-extract from output PDF
+            md_dir = MarkdownExporter.export_pdf_post_hoc(
+                output_path, OUTPUT_DIR, book_name
+            )
+        else:
+            # Native PyMuPDF: use fragment metadata
+            md_dir = MarkdownExporter.export_pdf_native(
+                fragments, translations, OUTPUT_DIR, book_name
+            )
+        _update(task_id, markdown_dir=md_dir)
+    except Exception as e:
+        logger.exception("Markdown export failed for %s", file_type)
 
 
 def _run_translate_babeldoc(task_id: str, file_path: str, target_lang: str = "zh-CN",
@@ -826,6 +876,18 @@ def _run_translate_babeldoc(task_id: str, file_path: str, target_lang: str = "zh
         if _tasks.get(task_id, {}).get("stopped"):
             _update(task_id, status="stopped", step="Stopped by user")
             return
+
+        # ── Markdown export ─────────────────────────────────────
+        if _tasks.get(task_id, {}).get("export_markdown"):
+            try:
+                from handlers.markdown_exporter import MarkdownExporter
+                book_name = os.path.splitext(os.path.basename(file_path))[0]
+                md_dir = MarkdownExporter.export_pdf_post_hoc(
+                    output, OUTPUT_DIR, book_name
+                )
+                _update(task_id, markdown_dir=md_dir)
+            except Exception as e:
+                logger.exception("Markdown export failed for BabelDOC")
 
         _update(task_id, status="done", step="Complete!",
                 output=output, translated=0, cached=0)
@@ -1097,14 +1159,17 @@ async def start_translation(task_id: str, body: dict = None):
     bilingual = True
     pdf_method = "babeldoc"  # default PDF engine
     pages = None  # page range string, e.g. "1-5,8"
+    export_markdown = False
     if body:
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
         pdf_method = body.get("pdf_method", pdf_method)
         pages = body.get("pages") or None
+        export_markdown = body.get("export_markdown", False)
 
     _update(task_id, status="queued", step="Starting...", stopped=False,
-            target_lang=target_lang, bilingual=bilingual)
+            target_lang=target_lang, bilingual=bilingual,
+            export_markdown=export_markdown)
 
     file_type = task.get("file_type", ".epub")
     if file_type == ".epub":
@@ -1142,10 +1207,12 @@ async def start_babeldoc_translation(task_id: str, body: dict = None):
     target_lang = "zh-CN"
     bilingual = True
     pages = None
+    export_markdown = False
     if body:
         target_lang = body.get("target_lang", target_lang)
         bilingual = body.get("bilingual", True)
         pages = body.get("pages") or None
+        export_markdown = body.get("export_markdown", False)
 
     # ── Scanned PDF detection ──────────────────────────────────────
     if file_path.lower().endswith(".pdf"):
@@ -1169,7 +1236,8 @@ async def start_babeldoc_translation(task_id: str, body: dict = None):
             pass  # If scan detection fails, proceed with BabelDOC
 
     _update(task_id, status="queued", step="Starting BabelDOC...", stopped=False,
-            target_lang=target_lang, bilingual=bilingual)
+            target_lang=target_lang, bilingual=bilingual,
+            export_markdown=export_markdown)
 
     _executor.submit(_run_translate_babeldoc, task_id, file_path,
                      target_lang, bilingual, pages)
