@@ -850,7 +850,7 @@ async def upload_file(file: UploadFile = File(...)):
     max_name_len = 80
     if len(safe_name) > max_name_len:
         base, ext = os.path.splitext(safe_name)
-        safe_name = base[:max_name_len - len(ext)] + ext
+        safe_name = base[:max_name_len - len(ext)].strip() + ext
     file_path = os.path.join(upload_dir, f"{task_id}_{safe_name}")
 
     with open(file_path, "wb") as f:
@@ -1203,6 +1203,130 @@ async def start_ocr_translation(task_id: str, body: dict = None):
     return {"ok": True}
 
 
+# ── Image Translation API ──────────────────────────────────────────
+
+IMAGE_DIR = os.path.join(TEMP_DIR, "_images")
+
+
+def _run_translate_image(task_id: str, file_path: str, target_lang: str = "zh-CN",
+                         bilingual: bool = False):
+    """Background image translation — OCR + translate to text."""
+    try:
+        _update(task_id, status="loading", step="Loading configuration...")
+        config = Config(CONFIG_PATH)
+        config.load()
+
+        from handlers.image_handler import ImageTranslator, ImageTranslationError
+
+        translator = ImageTranslator(
+            ocr_api_key=config.ocr_api_key,
+            ocr_base_url=config.ocr_api_base or "https://api.siliconflow.com/v1",
+            ocr_model=config.ocr_model or "Qwen/Qwen3-VL-32B-Instruct",
+        )
+
+        from epub_translator.translator import Translator as _Translator
+        _t = _Translator(config, target_lang, bilingual)
+
+        def translate_texts(texts):
+            return _t.translate_all(texts)
+
+        def progress_cb(stage, pct, msg):
+            _update(task_id, status="translating", step=msg,
+                    file_progress=pct, file_total=100)
+
+        result = translator.translate_to_text(
+            file_path, target_lang=target_lang,
+            progress_callback=progress_cb, translate_fn=translate_texts,
+        )
+
+        # Store text result in output field
+        import json
+        output_json = json.dumps(result, ensure_ascii=False)
+        _update(task_id, status="done", step="Complete!",
+                output=output_json, file_progress=100, file_total=100)
+
+    except ImageTranslationError as e:
+        _update(task_id, status="error", error=str(e))
+    except Exception as e:
+        _update(task_id, status="error", error=str(e))
+
+
+@app.post("/api/image/upload")
+async def image_upload(file: UploadFile = File(...)):
+    ext = os.path.splitext(file.filename or "img.png")[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".bmp", ".webp"):
+        raise HTTPException(400, "Unsupported format. Use JPG, PNG, BMP, or WebP.")
+
+    task_id = uuid.uuid4().hex[:12]
+    os.makedirs(IMAGE_DIR, exist_ok=True)
+
+    safe_name = f"{task_id}{ext}"
+    file_path = os.path.join(IMAGE_DIR, safe_name)
+
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    _tasks[task_id] = {
+        "status": "loaded", "step": "Ready", "task_id": task_id,
+        "filename": file.filename, "file_path": file_path,
+        "file_type": ext, "start_time": time.time(),
+    }
+
+    return {"task_id": task_id, "filename": file.filename, "file_type": ext}
+
+
+@app.get("/api/image/preview/{task_id}")
+async def image_preview(task_id: str):
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+    ext = os.path.splitext(file_path)[1].lower()
+    media_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                 ".png": "image/png", ".bmp": "image/bmp", ".webp": "image/webp"}
+    return FileResponse(file_path, media_type=media_map.get(ext, "image/png"))
+
+
+@app.post("/api/image/translate/{task_id}")
+async def image_start_translate(task_id: str, body: dict = None):
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    if task.get("status") == "translating":
+        raise HTTPException(400, "Already translating")
+    file_path = task.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(404, "File not found")
+
+    target_lang = "zh-CN"
+    bilingual = False
+    if body:
+        target_lang = body.get("target_lang", target_lang)
+        bilingual = body.get("bilingual", False)
+
+    _update(task_id, status="queued", step="Starting image translation...", stopped=False,
+            target_lang=target_lang, bilingual=bilingual)
+
+    _executor.submit(_run_translate_image, task_id, file_path, target_lang, bilingual)
+
+    return {"ok": True}
+
+
+@app.get("/api/image/result/{task_id}")
+async def image_result(task_id: str):
+    task = _tasks.get(task_id)
+    if not task or task.get("status") != "done":
+        raise HTTPException(404, "Not ready")
+    output = task.get("output")
+    if not output:
+        raise HTTPException(404, "No result")
+    # output is a JSON string from _run_translate_image
+    import json
+    return json.loads(output)
+
+
 @app.post("/api/stop/{task_id}")
 async def stop_translation(task_id: str):
     task = _tasks.get(task_id)
@@ -1486,6 +1610,13 @@ async def login_page():
 @app.get("/batch", response_class=HTMLResponse)
 async def batch_page():
     path = os.path.join(os.path.dirname(__file__), "batch.html")
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/imagetranslate", response_class=HTMLResponse)
+async def image_translate_page():
+    path = os.path.join(os.path.dirname(__file__), "imagetranslate.html")
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 

@@ -52,6 +52,7 @@
     .dropdown-menu .dm-icon { width: 18px; height: 18px; color: var(--accent); flex-shrink: 0; }
     .dropdown-menu .dm-label { font-weight: 500; }
     .dropdown-menu .dm-desc { font-size: 11px; color: var(--text2); display: block; }
+    .dropdown-menu .dm-divider { height: 1px; background: var(--border); margin: 4px 0; }
     .nav-btn {
       display: flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 10px;
       font-size: 13px; font-weight: 500; text-decoration: none; transition: all 0.15s;
@@ -254,6 +255,11 @@
           <span class="dm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
           <span><span class="dm-label" data-i18n="menuOcr">OCR 翻译</span><span class="dm-desc" data-i18n="menuOcrDesc">扫描版 PDF · AI 识别 + 覆写</span></span>
         </a>
+        <div class="dm-divider"></div>
+        <a href="/imagetranslate">
+          <span class="dm-icon">🖼️</span>
+          <span><span class="dm-label" data-i18n="menuImage">图片翻译</span><span class="dm-desc" data-i18n="menuImageDesc">JPG/PNG · 文字检测 + 覆写</span></span>
+        </a>
       </div>
     </div>
 
@@ -378,6 +384,7 @@ const i18n = {
     menuTranslate: '翻译', menuEbook: '电子书翻译', menuEbookDesc: 'EPUB · DOCX · 文字 PDF',
     menuBatch: '批量翻译', menuBatchDesc: '多文件上传 · 智能排队',
     menuOcr: 'OCR 翻译', menuOcrDesc: '扫描版 PDF · AI 识别',
+    menuImage: '图片翻译', menuImageDesc: 'JPG/PNG · 文字检测 + 覆写',
     menuResources: '资源', menuGuide: '使用指南', menuGuideDesc: '快速上手指南',
     menuGithubDesc: '开源代码仓库', navStart: '开始翻译',
     batchTitle: '批量翻译', dropHere: '拖拽文件到此处，或点击选择',
@@ -399,6 +406,7 @@ const i18n = {
     menuTranslate: 'Translate', menuEbook: 'E-book Translation', menuEbookDesc: 'EPUB · DOCX · Text PDF',
     menuBatch: 'Batch Translation', menuBatchDesc: 'Multi-file · Smart Queue',
     menuOcr: 'OCR Translation', menuOcrDesc: 'Scanned PDF · AI Recognition',
+    menuImage: 'Image Translation', menuImageDesc: 'JPG/PNG · Text detection + Overlay',
     menuResources: 'Resources', menuGuide: 'Guide', menuGuideDesc: 'Quick Start Guide',
     menuGithubDesc: 'Open Source Repository', navStart: 'Start Translating',
     batchTitle: 'Batch Translation', dropHere: 'Drop files here or click to browse',

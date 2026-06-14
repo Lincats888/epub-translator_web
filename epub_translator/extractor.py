@@ -8,7 +8,7 @@ from xml.etree import ElementTree
 class EpubExtractor:
     def __init__(self, epub_path: str, temp_dir: str = "temp"):
         self._epub_path = epub_path
-        self._book_name = os.path.splitext(os.path.basename(epub_path))[0]
+        self._book_name = os.path.splitext(os.path.basename(epub_path))[0].strip()
         self._extract_dir = os.path.join(temp_dir, self._book_name)
 
     @property

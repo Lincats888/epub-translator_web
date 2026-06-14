@@ -28,10 +28,108 @@ import time
 import logging
 import threading
 
+import fitz  # PyMuPDF — for per-page text detection
+
 from babeldoc.format.pdf.document_il.midend.detect_scanned_file import ScannedPDFError
 from .base import BaseHandler, TextFragment
 
 logger = logging.getLogger(__name__)
+
+# ── Page text detection ──────────────────────────────────────────
+
+IMAGE_PAGE_CHAR_THRESHOLD = 100  # pages with <100 chars → image/scan page
+
+
+def _parse_page_range(pages_str: str) -> set[int]:
+    """Parse a page range string like '1-5,8,10-12' into a set of 1-indexed ints."""
+    result: set[int] = set()
+    if not pages_str or not pages_str.strip():
+        return result
+    for part in pages_str.split(","):
+        part = part.strip()
+        if "-" in part:
+            a, b = part.split("-", 1)
+            result.update(range(int(a.strip()), int(b.strip()) + 1))
+        else:
+            result.add(int(part))
+    return result
+
+
+def _pages_to_range_str(pages: set[int] | list[int]) -> str | None:
+    """Convert a set of 1-indexed page numbers to a BabelDOC-compatible range string.
+
+    Returns None if the set is empty.
+    """
+    if not pages:
+        return None
+    nums = sorted(set(pages))
+    ranges = []
+    start = nums[0]
+    end = nums[0]
+    for n in nums[1:]:
+        if n == end + 1:
+            end = n
+        else:
+            ranges.append(f"{start}" if start == end else f"{start}-{end}")
+            start = end = n
+    ranges.append(f"{start}" if start == end else f"{start}-{end}")
+    return ",".join(ranges)
+
+
+def _filter_text_pages(
+    pdf_path: str,
+    selected_pages: set[int] | None = None,
+    char_threshold: int = IMAGE_PAGE_CHAR_THRESHOLD,
+) -> tuple[str | None, list[int], list[int]]:
+    """Scan a PDF page-by-page with PyMuPDF and separate text vs image pages.
+
+    Args:
+        pdf_path: Path to the PDF.
+        selected_pages: 1-indexed pages the user wants to translate. None = all.
+        char_threshold: Pages with fewer extractable chars than this are image pages.
+
+    Returns:
+        (babeldoc_pages_str, text_pages, image_pages)
+        - babeldoc_pages_str: range string for BabelDOC, or None if no text pages
+        - text_pages: list of 1-indexed text-based pages
+        - image_pages: list of 1-indexed image-based pages
+    """
+    doc = fitz.open(pdf_path)
+    try:
+        total = len(doc)
+        if total == 0:
+            return None, [], []
+
+        # Determine which pages to check
+        if selected_pages:
+            check_pages = {p for p in selected_pages if 1 <= p <= total}
+        else:
+            check_pages = set(range(1, total + 1))
+
+        text_pages = []
+        image_pages = []
+
+        for p in sorted(check_pages):
+            page_text = doc[p - 1].get_text().strip()
+            if len(page_text) < char_threshold:
+                image_pages.append(p)
+            else:
+                text_pages.append(p)
+
+        pages_str = _pages_to_range_str(text_pages)
+
+        logger.info(
+            "Page filter: total=%d, text=%d%s, image=%d%s",
+            total,
+            len(text_pages),
+            f" ({pages_str})" if pages_str else "",
+            len(image_pages),
+            f" {image_pages}" if image_pages else "",
+        )
+
+        return pages_str, text_pages, image_pages
+    finally:
+        doc.close()
 
 # ── Module-level lazy init ────────────────────────────────────────
 
@@ -182,6 +280,32 @@ class PdfBabeldocHandler(BaseHandler):
         if progress_callback:
             progress_callback("init", 5, f"Downloading layout model (~200MB first time)...")
 
+        # ── Filter image/scan pages ──
+        # Parse user's page selection (if any), then check each page with
+        # PyMuPDF for extractable text.  Skip non-text (image) pages so
+        # BabelDOC only processes text-based pages.
+        selected = _parse_page_range(pages) if pages else None
+        filtered_pages_str, text_pages, image_pages = _filter_text_pages(
+            file_path, selected_pages=selected,
+        )
+
+        if not text_pages:
+            raise RuntimeError(
+                "All pages in this PDF are image-based (no extractable text). "
+                "Please use OCR translation for scanned/image PDFs."
+            )
+
+        if image_pages and progress_callback:
+            progress_callback(
+                "init", 5,
+                f"Skip {len(image_pages)} image page(s): {image_pages} — "
+                f"translating {len(text_pages)} text pages"
+            )
+        logger.info(
+            "BabelDOC page filter: user=%s → text=%s (%d pages), image=%d skip",
+            pages or "all", filtered_pages_str, len(text_pages), len(image_pages),
+        )
+
         # Create translator (OpenAI-compatible, works with DeepSeek API)
         translator = OpenAITranslator(
             lang_in,        # source language (positional arg 1)
@@ -201,7 +325,7 @@ class PdfBabeldocHandler(BaseHandler):
             lang_out=lang_out,
             doc_layout_model=None,      # auto-download on first call
             output_dir=os.path.abspath(output_dir),
-            pages=pages,                # page range, None = all
+            pages=filtered_pages_str,   # text-only pages (image pages skipped)
             qps=10,                     # API QPS limit
             # ── Output mode ──
             # bilingual=True  → no_mono=True,  no_dual=False → dual PDF only
@@ -213,8 +337,17 @@ class PdfBabeldocHandler(BaseHandler):
             use_side_by_side_dual=False,        # 禁用同页并排（默认 True 会导致中文覆盖英文）
             # ── Watermark ──
             watermark_output_mode=WatermarkOutputMode.NoWatermark,
-            # ── Let BabelDOC detect scanned PDFs ──
-            skip_scanned_detection=False,
+            # ── Keep short lines separate (TOC entries, etc.) ──
+            split_short_lines=True,
+            # ── Skip BabelDOC's internal scan detection ──
+            # We already pre-filter image pages with _filter_text_pages(),
+            # so BabelDOC only sees text pages. Disable its redundant check.
+            skip_scanned_detection=True,
+            # ── Auto-detect text-layer + underlying image PDFs ──
+            # For pages where a text layer exists but the real content is
+            # in the underlying image (e.g. OCR-overlaid scans), BabelDOC
+            # auto-switches to image-based extraction per page.
+            auto_enable_ocr_workaround=True,
             # Skip automatic glossary extraction — saves 30-90s of
             # extra LLM API calls before translation starts.
             auto_extract_glossary=False,
@@ -272,10 +405,13 @@ class PdfBabeldocHandler(BaseHandler):
         try:
             result = translate_fn(config)
         except ScannedPDFError:
-            raise RuntimeError(
-                "此 PDF 为扫描版（图片型）文档，BabelDOC 仅支持文字型 PDF。"
-                "请使用 OCR 翻译页面处理扫描版 PDF。"
-            )
+            # BabelDOC's internal scan detection still fired. Force skip it
+            # and retry — we already pre-filtered image pages above.
+            logger.warning("BabelDOC ScannedPDFError — forcing skip_scanned_detection=True")
+            if progress_callback:
+                progress_callback("translate", 5, "Forcing text-only translation (internal scan flag overridden)...")
+            config.skip_scanned_detection = True
+            result = translate_fn(config)
         except Exception:
             raise
         finally:
@@ -341,6 +477,34 @@ class PdfBabeldocHandler(BaseHandler):
         lang_in = lang_map.get(source_lang, source_lang)
         lang_out = lang_map.get(target_lang, target_lang)
 
+        # ── Filter image/scan pages ──
+        selected = _parse_page_range(pages) if pages else None
+        filtered_pages_str, text_pages, image_pages = _filter_text_pages(
+            file_path, selected_pages=selected,
+        )
+
+        if not text_pages:
+            raise RuntimeError(
+                "All pages in this PDF are image-based (no extractable text). "
+                "Please use OCR translation for scanned/image PDFs."
+            )
+
+        if image_pages:
+            logger.info(
+                "BabelDOC async page filter: user=%s → text=%s (%d pages), image=%d skip",
+                pages or "all", filtered_pages_str, len(text_pages), len(image_pages),
+            )
+            yield {
+                "type": "progress_update",
+                "stage": "init",
+                "stage_progress": 5,
+                "overall_progress": 0,
+                "step": (
+                    f"Skipping {len(image_pages)} image page(s): {image_pages} — "
+                    f"translating {len(text_pages)} text pages"
+                ),
+            }
+
         translator = OpenAITranslator(lang_in, lang_out, model, api_key=api_key, base_url=base_url)
 
         config = TranslationConfig(
@@ -350,14 +514,16 @@ class PdfBabeldocHandler(BaseHandler):
             lang_out=lang_out,
             doc_layout_model=None,
             output_dir=os.path.abspath(output_dir),
-            pages=pages,    # page range, None = all
+            pages=filtered_pages_str,   # text-only pages (image pages skipped)
             qps=10,
             no_mono=bilingual,
             no_dual=not bilingual,
             use_alternating_pages_dual=True,
             use_side_by_side_dual=False,
+            split_short_lines=True,
             watermark_output_mode=WatermarkOutputMode.NoWatermark,
-            skip_scanned_detection=False,
+            skip_scanned_detection=True,
+            auto_enable_ocr_workaround=True,
             auto_extract_glossary=False,
         )
 
@@ -371,10 +537,25 @@ class PdfBabeldocHandler(BaseHandler):
                             out = str(tr.dual_pdf_path if bilingual else tr.mono_pdf_path)
                             yield {"type": "result", "output_path": out}
         except ScannedPDFError:
-            yield {"type": "error", "error": (
-                "此 PDF 为扫描版（图片型）文档，BabelDOC 仅支持文字型 PDF。"
-                "请使用 OCR 翻译页面处理扫描版 PDF。"
-            )}
+            # BabelDOC's internal scan detection fired despite pre-filtering.
+            # Force skip it and retry.
+            logger.warning("BabelDOC async ScannedPDFError — forcing skip_scanned_detection=True")
+            yield {
+                "type": "progress_update",
+                "stage": "init",
+                "stage_progress": 5,
+                "overall_progress": 0,
+                "step": "Forcing text-only translation (internal scan flag overridden)...",
+            }
+            config.skip_scanned_detection = True
+            async for event in _async_translate(config):
+                yield event
+                if event.get("type") in ("finish", "error"):
+                    if event.get("type") == "finish":
+                        tr = event.get("translate_result")
+                        if tr:
+                            out = str(tr.dual_pdf_path if bilingual else tr.mono_pdf_path)
+                            yield {"type": "result", "output_path": out}
         except Exception as e:
             logger.exception("BabelDOC async translation failed")
             yield {"type": "error", "error": str(e)}
